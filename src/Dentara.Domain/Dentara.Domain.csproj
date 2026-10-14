@@ -6,4 +6,11 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Dentara.UnitTests" />
+    <InternalsVisibleTo Include="Dentara.IntegrationTests" />
+    <InternalsVisibleTo Include="Dentara.Application" />
+    <InternalsVisibleTo Include="Dentara.Infrastructure" />
+  </ItemGroup>
+
 </Project>
