@@ -1,0 +1,53 @@
+## .NET
+*.user
+*.suo
+*.userprefs
+*.cache
+*.log
+.vs/
+.idea/
+*.DS_Store
+
+## Build outputs
+bin/
+obj/
+artifacts/
+TestResults/
+
+## NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+
+## User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+## JetBrains
+.idea/
+
+## VS Code
+.vscode/
+
+## Local environment files
+.env
+.env.local
+appsettings.Local.json
+appsettings.Development.json
+
+## EF Core
+*.dbmdl
+*.ldf
+*.mdf
+
+## Logs
+logs/
+*.log
+
+## OS
+Thumbs.db
+desktop.ini

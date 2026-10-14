@@ -1,0 +1,11 @@
+# Dentara API - HTTP test file
+# Use with the .http support in Visual Studio / VS Code REST Client / JetBrains Rider
+
+@host = https://localhost:5001
+@devHost = http://localhost:5000
+
+### Health check
+GET {{devHost}}/health
+Accept: application/json
+
+###
