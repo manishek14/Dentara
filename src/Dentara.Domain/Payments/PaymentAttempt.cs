@@ -1,10 +1,12 @@
 namespace Dentara.Domain.Payments;
 
 using Dentara.Domain.Common;
+using Dentara.Domain.Events.Payments;
+using Dentara.Domain.Exceptions.Payments;
 
 /// <summary>
 /// A single attempt to pay for an appointment. An appointment may have multiple
-/// attempts (user retries after a failed attempt).
+/// attempts (user retries after a failed attempt). This is an aggregate root.
 ///
 /// CRITICAL INVARIANTS:
 /// - Amount must be positive (matches Appointment.PriceAmountSnapshot).
@@ -16,7 +18,7 @@ using Dentara.Domain.Common;
 /// - Receiving a callback does NOT auto-transition to Succeeded. The Application
 ///   layer must verify the callback signature and explicitly call MarkSucceeded.
 /// </summary>
-public sealed class PaymentAttempt : Entity
+public sealed class PaymentAttempt : AggregateRoot
 {
     public Guid AppointmentId { get; private set; }
 
@@ -136,14 +138,16 @@ public sealed class PaymentAttempt : Entity
         }
 
         if (Status != PaymentStatus.Initiated)
-            throw new InvalidOperationException(
-                $"Cannot transition to Pending from {Status}.");
+            throw new InvalidPaymentTransitionException(Id, Status.Name, nameof(PaymentStatus.Pending));
 
         StatusValue = PaymentStatus.Pending.Value;
         GatewayAuthority = gatewayAuthority;
         GatewayRedirectUrl = redirectUrl;
         InitiatedAtUtc ??= clock.UtcNow;
         Touch(clock.UtcNow);
+        RaiseEvent(new PaymentInitiatedEvent(
+            Id, AppointmentId, PatientId, Provider.Name, Amount, Currency,
+            clock.UtcNow));
     }
 
     /// <summary>
@@ -155,8 +159,7 @@ public sealed class PaymentAttempt : Entity
             throw new ArgumentException("ProviderTransactionId is required.");
 
         if (Status != PaymentStatus.Pending && Status != PaymentStatus.Unknown)
-            throw new InvalidOperationException(
-                $"Cannot transition to Succeeded from {Status}.");
+            throw new InvalidPaymentTransitionException(Id, Status.Name, nameof(PaymentStatus.Succeeded));
 
         StatusValue = PaymentStatus.Succeeded.Value;
         ProviderTransactionId ??= providerTransactionId;
@@ -164,6 +167,9 @@ public sealed class PaymentAttempt : Entity
         LastCallbackAtUtc ??= clock.UtcNow;
         FailureReason = null;
         Touch(clock.UtcNow);
+        RaiseEvent(new PaymentSucceededEvent(
+            Id, AppointmentId, PatientId, Provider.Name, ProviderTransactionId!,
+            Amount, Currency, SucceededAtUtc.Value, clock.UtcNow));
     }
 
     /// <summary>
@@ -176,14 +182,16 @@ public sealed class PaymentAttempt : Entity
             throw new ArgumentException("Failure reason is required.");
 
         if (Status != PaymentStatus.Pending)
-            throw new InvalidOperationException(
-                $"Cannot transition to Failed from {Status}.");
+            throw new InvalidPaymentTransitionException(Id, Status.Name, nameof(PaymentStatus.Failed));
 
         StatusValue = PaymentStatus.Failed.Value;
         FailedAtUtc ??= clock.UtcNow;
         LastCallbackAtUtc ??= clock.UtcNow;
         FailureReason = reason;
         Touch(clock.UtcNow);
+        RaiseEvent(new PaymentFailedEvent(
+            Id, AppointmentId, PatientId, Provider.Name, reason,
+            FailedAtUtc.Value, clock.UtcNow));
     }
 
     /// <summary>
@@ -194,13 +202,14 @@ public sealed class PaymentAttempt : Entity
     public void MarkUnknown(string reason, IClock clock)
     {
         if (Status != PaymentStatus.Pending)
-            throw new InvalidOperationException(
-                $"Cannot transition to Unknown from {Status}.");
+            throw new InvalidPaymentTransitionException(Id, Status.Name, nameof(PaymentStatus.Unknown));
 
         StatusValue = PaymentStatus.Unknown.Value;
         FailureReason = reason;
         LastCallbackAtUtc ??= clock.UtcNow;
         Touch(clock.UtcNow);
+        RaiseEvent(new PaymentUnknownEvent(
+            Id, AppointmentId, PatientId, Provider.Name, reason, clock.UtcNow));
     }
 
     /// <summary>
@@ -234,9 +243,8 @@ public sealed class PaymentAttempt : Entity
         if (refund.PaymentAttemptId != Id)
             throw new ArgumentException("Refund does not belong to this payment.");
         if (!CanRefundMore(refund.Amount))
-            throw new InvalidOperationException(
-                $"Refund of {refund.Amount} would exceed payment amount {Amount} " +
-                $"(already refunded: {TotalRefundedAmount}).");
+            throw new RefundExceedsPaymentException(
+                Id, Amount, TotalRefundedAmount, refund.Amount);
         _refunds.Add(refund);
         UpdateRefundAggregateState();
     }

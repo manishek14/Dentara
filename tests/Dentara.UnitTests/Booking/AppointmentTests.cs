@@ -2,6 +2,7 @@ namespace Dentara.UnitTests.Booking;
 
 using Dentara.Domain.Booking;
 using Dentara.Domain.Common;
+using Dentara.Domain.Exceptions.Booking;
 using FluentAssertions;
 using Xunit;
 
@@ -111,7 +112,7 @@ public class AppointmentTests
     {
         var appt = CreateValidAppointment();
 
-        appt.Confirm(_clock);
+        appt.Confirm(_clock, Guid.NewGuid(), 500_000m);
 
         appt.Status.Should().Be(AppointmentStatus.Confirmed);
         appt.ConfirmedAtUtc.Should().Be(_clock.UtcNow);
@@ -122,11 +123,11 @@ public class AppointmentTests
     public void Confirm_FromConfirmed_Throws()
     {
         var appt = CreateValidAppointment();
-        appt.Confirm(_clock);
+        appt.Confirm(_clock, Guid.NewGuid(), 500_000m);
 
-        var act = () => appt.Confirm(_clock);
+        var act = () => appt.Confirm(_clock, Guid.NewGuid(), 500_000m);
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidAppointmentTransitionException>();
     }
 
     [Fact]
@@ -134,7 +135,7 @@ public class AppointmentTests
     {
         var appt = CreateValidAppointment();
 
-        appt.Expire(_clock);
+        appt.Expire(_clock, paymentWasVerifiedAbsent: true);
 
         appt.Status.Should().Be(AppointmentStatus.Expired);
         appt.ExpiredAtUtc.Should().Be(_clock.UtcNow);
@@ -144,11 +145,11 @@ public class AppointmentTests
     public void Expire_FromConfirmed_Throws()
     {
         var appt = CreateValidAppointment();
-        appt.Confirm(_clock);
+        appt.Confirm(_clock, Guid.NewGuid(), 500_000m);
 
-        var act = () => appt.Expire(_clock);
+        var act = () => appt.Expire(_clock, paymentWasVerifiedAbsent: true);
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidAppointmentTransitionException>();
     }
 
     [Fact]
@@ -167,7 +168,7 @@ public class AppointmentTests
     public void Cancel_FromConfirmed_Succeeds()
     {
         var appt = CreateValidAppointment();
-        appt.Confirm(_clock);
+        appt.Confirm(_clock, Guid.NewGuid(), 500_000m);
 
         appt.Cancel(_clock, "Patient");
 
@@ -178,11 +179,11 @@ public class AppointmentTests
     public void Cancel_FromExpired_Throws()
     {
         var appt = CreateValidAppointment();
-        appt.Expire(_clock);
+        appt.Expire(_clock, paymentWasVerifiedAbsent: true);
 
         var act = () => appt.Cancel(_clock, "Patient");
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidAppointmentTransitionException>();
     }
 
     [Fact]
@@ -193,14 +194,14 @@ public class AppointmentTests
 
         var act = () => appt.Cancel(_clock, "Patient");
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidAppointmentTransitionException>();
     }
 
     [Fact]
     public void Complete_FromConfirmed_Succeeds()
     {
         var appt = CreateValidAppointment();
-        appt.Confirm(_clock);
+        appt.Confirm(_clock, Guid.NewGuid(), 500_000m);
 
         appt.Complete(_clock, "Service delivered");
 
@@ -215,14 +216,14 @@ public class AppointmentTests
 
         var act = () => appt.Complete(_clock);
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidAppointmentTransitionException>();
     }
 
     [Fact]
     public void MarkNoShow_FromConfirmed_Succeeds()
     {
         var appt = CreateValidAppointment();
-        appt.Confirm(_clock);
+        appt.Confirm(_clock, Guid.NewGuid(), 500_000m);
 
         appt.MarkNoShow(_clock, "Patient did not arrive");
 
@@ -234,7 +235,7 @@ public class AppointmentTests
     public void CalculateRefundAmount_UsesSnapshotPercent()
     {
         var appt = CreateValidAppointment();
-        appt.Confirm(_clock);
+        appt.Confirm(_clock, Guid.NewGuid(), 500_000m);
 
         var refund = appt.CalculateRefundAmount();
 
@@ -245,7 +246,7 @@ public class AppointmentTests
     public void CalculateCancellationFee_UsesSnapshotPercent()
     {
         var appt = CreateValidAppointment();
-        appt.Confirm(_clock);
+        appt.Confirm(_clock, Guid.NewGuid(), 500_000m);
 
         var fee = appt.CalculateCancellationFee();
 
@@ -268,12 +269,12 @@ public class AppointmentTests
     public void Confirm_IsIdempotentForTimestamp()
     {
         var appt = CreateValidAppointment();
-        appt.Confirm(_clock);
+        appt.Confirm(_clock, Guid.NewGuid(), 500_000m);
         var firstConfirmedAt = appt.ConfirmedAtUtc;
 
         // Try to confirm again — should throw (not idempotent at state level)
-        var act = () => appt.Confirm(_clock);
-        act.Should().Throw<InvalidOperationException>();
+        var act = () => appt.Confirm(_clock, Guid.NewGuid(), 500_000m);
+        act.Should().Throw<InvalidAppointmentTransitionException>();
 
         appt.ConfirmedAtUtc.Should().Be(firstConfirmedAt); // unchanged
     }

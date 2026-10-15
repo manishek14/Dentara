@@ -1,9 +1,11 @@
 namespace Dentara.Domain.Booking;
 
 using Dentara.Domain.Common;
+using Dentara.Domain.Events.Booking;
+using Dentara.Domain.Exceptions.Booking;
 
 /// <summary>
-/// The appointment entity — central to the Booking module.
+/// The appointment entity — central to the Booking module. This is an aggregate root.
 ///
 /// CRITICAL INVARIANTS:
 /// - StartAtUtc < EndAtUtc (always)
@@ -17,7 +19,7 @@ using Dentara.Domain.Common;
 /// ResourceAllocation rows, created atomically within the booking transaction
 /// (ADR-003).
 /// </summary>
-public sealed class Appointment : Entity
+public sealed class Appointment : AggregateRoot
 {
     public Guid PatientId { get; private set; }
 
@@ -154,32 +156,42 @@ public sealed class Appointment : Entity
         appt.RecordEvent(AppointmentEventType.Created, clock, "Appointment created");
         appt.RecordEvent(AppointmentEventType.PaymentWindowStarted, clock,
             $"Payment window expires at {appt.ExpiresAtUtc:O}");
+        appt.RaiseEvent(new AppointmentCreatedEvent(
+            appt.Id, appt.PatientId, appt.DentistId, appt.ServiceId,
+            appt.StartAtUtc, appt.ExpiresAtUtc, appt.PriceAmountSnapshot,
+            appt.CurrencySnapshot, clock.UtcNow));
         return appt;
     }
 
     /// <summary>
     /// Transition the appointment to Confirmed. Only legal from PendingPayment.
     /// </summary>
-    public void Confirm(IClock clock, string reason = "Payment succeeded")
+    public void Confirm(IClock clock, Guid paymentAttemptId, decimal paidAmount, string? correlationId = null, string reason = "Payment succeeded")
     {
         EnsureTransitionAllowed(AppointmentStatus.PendingPayment, AppointmentStatus.Confirmed);
         StatusValue = AppointmentStatus.Confirmed.Value;
         ConfirmedAtUtc ??= clock.UtcNow;
         Touch(clock.UtcNow);
         RecordEvent(AppointmentEventType.Confirmed, clock, reason);
+        RaiseEvent(new AppointmentConfirmedEvent(
+            Id, PatientId, DentistId, paymentAttemptId, ConfirmedAtUtc.Value,
+            paidAmount, CurrencySnapshot, clock.UtcNow, correlationId));
     }
 
     /// <summary>
     /// Transition to Expired. Only legal from PendingPayment. The expiry worker
     /// must first verify that no payment is in Unknown/Succeeded state (ADR-004).
     /// </summary>
-    public void Expire(IClock clock, string reason = "Payment window expired")
+    public void Expire(IClock clock, bool paymentWasVerifiedAbsent, string? correlationId = null, string reason = "Payment window expired")
     {
         EnsureTransitionAllowed(AppointmentStatus.PendingPayment, AppointmentStatus.Expired);
         StatusValue = AppointmentStatus.Expired.Value;
         ExpiredAtUtc ??= clock.UtcNow;
         Touch(clock.UtcNow);
         RecordEvent(AppointmentEventType.Expired, clock, reason);
+        RaiseEvent(new AppointmentExpiredEvent(
+            Id, PatientId, DentistId, ExpiresAtUtc, paymentWasVerifiedAbsent,
+            clock.UtcNow, correlationId));
     }
 
     /// <summary>
@@ -187,11 +199,14 @@ public sealed class Appointment : Entity
     /// Caller must release capacity atomically (ResourceAllocations) in the
     /// same DB transaction (ADR-003).
     /// </summary>
-    public void Cancel(IClock clock, string cancelledBy, string? reason = null)
+    public void Cancel(IClock clock, string cancelledBy, string? reason = null, string? correlationId = null)
     {
         if (Status != AppointmentStatus.PendingPayment && Status != AppointmentStatus.Confirmed)
-            throw new InvalidOperationException(
-                $"Cannot cancel an appointment in status {Status}.");
+            throw new InvalidAppointmentTransitionException(Id, Status.Name, nameof(AppointmentStatus.Cancelled));
+
+        var wasConfirmed = Status == AppointmentStatus.Confirmed;
+        decimal? refundableAmount = wasConfirmed ? CalculateRefundAmount() : null;
+        var currency = wasConfirmed ? CurrencySnapshot : null;
 
         StatusValue = AppointmentStatus.Cancelled.Value;
         CancelledAtUtc ??= clock.UtcNow;
@@ -200,30 +215,39 @@ public sealed class Appointment : Entity
         Touch(clock.UtcNow);
         RecordEvent(AppointmentEventType.Cancelled, clock,
             $"Cancelled by {cancelledBy}. Reason: {reason ?? "(none)"}");
+        RaiseEvent(new AppointmentCancelledEvent(
+            Id, PatientId, DentistId, cancelledBy, reason, wasConfirmed,
+            refundableAmount, currency, clock.UtcNow, correlationId));
     }
 
     /// <summary>
     /// Mark as Completed after the service was delivered.
     /// </summary>
-    public void Complete(IClock clock, string? notes = null)
+    public void Complete(IClock clock, string? notes = null, string? correlationId = null)
     {
         EnsureTransitionAllowed(AppointmentStatus.Confirmed, AppointmentStatus.Completed);
         StatusValue = AppointmentStatus.Completed.Value;
         CompletedAtUtc ??= clock.UtcNow;
         Touch(clock.UtcNow);
         RecordEvent(AppointmentEventType.Completed, clock, notes ?? "Service delivered");
+        RaiseEvent(new AppointmentCompletedEvent(
+            Id, PatientId, DentistId, StartAtUtc, CompletedAtUtc.Value,
+            clock.UtcNow, correlationId));
     }
 
     /// <summary>
     /// Mark as NoShow. The patient did not show up.
     /// </summary>
-    public void MarkNoShow(IClock clock, string? notes = null)
+    public void MarkNoShow(IClock clock, string? notes = null, string? correlationId = null)
     {
         EnsureTransitionAllowed(AppointmentStatus.Confirmed, AppointmentStatus.NoShow);
         StatusValue = AppointmentStatus.NoShow.Value;
         NoShowAtUtc ??= clock.UtcNow;
         Touch(clock.UtcNow);
         RecordEvent(AppointmentEventType.NoShow, clock, notes ?? "Patient did not arrive");
+        RaiseEvent(new AppointmentNoShowEvent(
+            Id, PatientId, DentistId, StartAtUtc, NoShowAtUtc.Value,
+            clock.UtcNow, correlationId));
     }
 
     /// <summary>
@@ -262,7 +286,6 @@ public sealed class Appointment : Entity
     private void EnsureTransitionAllowed(AppointmentStatus from, AppointmentStatus to)
     {
         if (Status != from)
-            throw new InvalidOperationException(
-                $"Cannot transition from {Status} to {to}. Expected source state: {from}.");
+            throw new InvalidAppointmentTransitionException(Id, Status.Name, to.Name);
     }
 }

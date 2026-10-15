@@ -1,16 +1,16 @@
 namespace Dentara.Domain.Payments;
 
 using Dentara.Domain.Common;
+using Dentara.Domain.Events.Payments;
+using Dentara.Domain.Exceptions.Payments;
 
 /// <summary>
 /// A refund against a PaymentAttempt. A single payment can have multiple refunds
 /// (e.g. partial refund first, then a second to complete). The aggregate invariant
 /// "total refunds ≤ payment amount" is enforced in PaymentAttempt.AddRefund.
-///
-/// Refunds are linked to Appointment cancellation events via RefundReason and
-/// optional CorrelationId (matches the AppointmentEvent CorrelationId).
+/// This is an aggregate root (in the sense that refunds have independent lifecycle).
 /// </summary>
-public sealed class Refund : Entity
+public sealed class Refund : AggregateRoot
 {
     public Guid PaymentAttemptId { get; private set; }
 
@@ -84,39 +84,45 @@ public sealed class Refund : Entity
     /// <summary>
     /// Mark the refund as succeeded at the gateway. Idempotent.
     /// </summary>
-    public void MarkSucceeded(string providerRefundId, IClock clock, string? notes = null)
+    public void MarkSucceeded(string providerRefundId, IClock clock, Guid patientId, string providerName, string? notes = null)
     {
         if (string.IsNullOrWhiteSpace(providerRefundId))
             throw new ArgumentException("ProviderRefundId is required.");
 
         if (Status == RefundStatus.Succeeded) return; // idempotent
         if (Status != RefundStatus.Pending && Status != RefundStatus.Failed)
-            throw new InvalidOperationException(
-                $"Cannot transition to Succeeded from {Status}.");
+            throw new InvalidPaymentTransitionException(Id, Status.Name, nameof(RefundStatus.Succeeded));
 
         StatusValue = RefundStatus.Succeeded.Value;
         ProviderRefundId ??= providerRefundId;
         SucceededAtUtc ??= clock.UtcNow;
         FailureReason = null;
         Touch(clock.UtcNow);
+        RaiseEvent(new RefundSucceededEvent(
+            Id, PaymentAttemptId, AppointmentId, patientId, providerName,
+            ProviderRefundId!, Amount, Currency, Reason, SucceededAtUtc.Value,
+            clock.UtcNow, CorrelationId));
     }
 
     /// <summary>
     /// Mark the refund as failed at the gateway. Idempotent.
     /// </summary>
-    public void MarkFailed(string failureReason, IClock clock)
+    public void MarkFailed(string failureReason, IClock clock, Guid patientId, string providerName)
     {
         if (string.IsNullOrWhiteSpace(failureReason))
             throw new ArgumentException("Failure reason is required.");
 
         if (Status == RefundStatus.Failed) return; // idempotent
         if (Status != RefundStatus.Pending)
-            throw new InvalidOperationException(
-                $"Cannot transition to Failed from {Status}.");
+            throw new InvalidPaymentTransitionException(Id, Status.Name, nameof(RefundStatus.Failed));
 
         StatusValue = RefundStatus.Failed.Value;
         FailedAtUtc ??= clock.UtcNow;
         FailureReason = failureReason;
         Touch(clock.UtcNow);
+        RaiseEvent(new RefundFailedEvent(
+            Id, PaymentAttemptId, AppointmentId, patientId, providerName,
+            failureReason, Amount, Currency, FailedAtUtc.Value, clock.UtcNow,
+            CorrelationId));
     }
 }

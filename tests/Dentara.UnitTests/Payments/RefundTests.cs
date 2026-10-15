@@ -1,6 +1,7 @@
 namespace Dentara.UnitTests.Payments;
 
 using Dentara.Domain.Common;
+using Dentara.Domain.Exceptions.Payments;
 using Dentara.Domain.Payments;
 using FluentAssertions;
 using Xunit;
@@ -55,7 +56,7 @@ public class RefundTests
             Guid.NewGuid(), Guid.NewGuid(),
             100m, "IRR", "X", _clock);
 
-        refund.MarkSucceeded("RFD-001", _clock);
+        refund.MarkSucceeded("RFD-001", _clock, Guid.NewGuid(), "Sandbox");
 
         refund.Status.Should().Be(RefundStatus.Succeeded);
         refund.ProviderRefundId.Should().Be("RFD-001");
@@ -68,11 +69,11 @@ public class RefundTests
         var refund = Refund.Create(
             Guid.NewGuid(), Guid.NewGuid(),
             100m, "IRR", "X", _clock);
-        refund.MarkSucceeded("RFD-001", _clock);
+        refund.MarkSucceeded("RFD-001", _clock, Guid.NewGuid(), "Sandbox");
         var firstSucceededAt = refund.SucceededAtUtc;
 
         _clock.UtcNow = _clock.UtcNow.AddMinutes(5);
-        refund.MarkSucceeded("RFD-002", _clock); // different id, should not overwrite
+        refund.MarkSucceeded("RFD-002", _clock, Guid.NewGuid(), "Sandbox"); // different id, should not overwrite
 
         refund.SucceededAtUtc.Should().Be(firstSucceededAt);
         refund.ProviderRefundId.Should().Be("RFD-001"); // not overwritten
@@ -85,7 +86,7 @@ public class RefundTests
             Guid.NewGuid(), Guid.NewGuid(),
             100m, "IRR", "X", _clock);
 
-        refund.MarkFailed("Bank rejected", _clock);
+        refund.MarkFailed("Bank rejected", _clock, Guid.NewGuid(), "Sandbox");
 
         refund.Status.Should().Be(RefundStatus.Failed);
         refund.FailureReason.Should().Be("Bank rejected");
@@ -97,11 +98,11 @@ public class RefundTests
         var refund = Refund.Create(
             Guid.NewGuid(), Guid.NewGuid(),
             100m, "IRR", "X", _clock);
-        refund.MarkSucceeded("RFD", _clock);
+        refund.MarkSucceeded("RFD", _clock, Guid.NewGuid(), "Sandbox");
 
-        var act = () => refund.MarkFailed("oops", _clock);
+        var act = () => refund.MarkFailed("oops", _clock, Guid.NewGuid(), "Sandbox");
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidPaymentTransitionException>();
     }
 
     [Fact]

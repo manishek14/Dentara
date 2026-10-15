@@ -1,6 +1,7 @@
 namespace Dentara.UnitTests.Payments;
 
 using Dentara.Domain.Common;
+using Dentara.Domain.Exceptions.Payments;
 using Dentara.Domain.Payments;
 using FluentAssertions;
 using Xunit;
@@ -116,7 +117,7 @@ public class PaymentAttemptTests
 
         var act = () => pa.MarkSucceeded("TX-001", _clock);
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidPaymentTransitionException>();
     }
 
     [Fact]
@@ -140,7 +141,7 @@ public class PaymentAttemptTests
 
         var act = () => pa.MarkFailed("should not happen", _clock);
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidPaymentTransitionException>();
     }
 
     [Fact]
