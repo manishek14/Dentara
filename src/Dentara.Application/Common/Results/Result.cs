@@ -34,6 +34,14 @@ public abstract record Result
         ErrorCode = errorCode,
         ErrorMessage = errorMessage
     };
+
+    public static Result FromException(Exception ex) => ex switch
+    {
+        DomainException de => Failure(de.ErrorCode, de.Message),
+        ArgumentException ae => Failure("VALIDATION_ERROR", ae.Message),
+        InvalidOperationException ioe => Failure("INVALID_OPERATION", ioe.Message),
+        _ => Failure("UNEXPECTED_ERROR", $"An unexpected error occurred: {ex.Message}")
+    };
 }
 
 public sealed record Result<T> : Result
@@ -53,7 +61,7 @@ public sealed record Result<T> : Result
         ErrorMessage = errorMessage
     };
 
-    public static Result<T> FromException(Exception ex) => ex switch
+    public new static Result<T> FromException(Exception ex) => ex switch
     {
         DomainException de => Failure(de.ErrorCode, de.Message),
         ArgumentException ae => Failure("VALIDATION_ERROR", ae.Message),
