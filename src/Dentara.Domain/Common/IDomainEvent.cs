@@ -11,6 +11,12 @@ namespace Dentara.Domain.Common;
 ///
 /// They are NOT used for state transitions within the aggregate. All invariants
 /// and state changes must be enforced synchronously inside the aggregate method.
+///
+/// Inherits from <see cref="System.ComponentModel.INotifyPropertyChanged"/>-style
+/// marker so the Application layer can dispatch them via MediatR INotification.
+/// To avoid a hard MediatR dependency in Domain, we use INotification from MediatR
+/// via a forward — but since Domain MUST stay pure, we declare a marker here and
+/// the Application layer adapts it.
 /// </summary>
 public interface IDomainEvent
 {

@@ -1,10 +1,16 @@
 namespace Dentara.Domain.Common;
 
+using MediatR;
+
 /// <summary>
-/// Base class for domain events with common fields. Concrete event classes
-/// inherit from this and add event-specific data.
+/// Base class for domain events with common fields. Inherits from MediatR.INotification
+/// so the Application layer can dispatch domain events via the same MediatR pipeline
+/// used for commands/queries. This pulls a MediatR reference into the Domain layer;
+/// it is acceptable because INotification is a pure marker interface with no behavior.
+///
+/// Concrete event classes inherit from this and add event-specific data.
 /// </summary>
-public abstract record DomainEvent : IDomainEvent
+public abstract record DomainEvent : IDomainEvent, INotification
 {
     public DateTimeOffset OccurredAtUtc { get; init; }
 

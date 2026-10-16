@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Dentara.Domain\Dentara.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Dentara.Application\Dentara.Application.csproj" />
   </ItemGroup>
 
 </Project>
