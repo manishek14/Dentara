@@ -34,9 +34,9 @@ public sealed class UserRoleConfiguration : IEntityTypeConfiguration<UserRole>
 
         builder.Property(ur => ur.UserId).IsRequired();
         builder.Property(ur => ur.RoleValue).IsRequired();
-        builder.Property(ur => ur.ExpiresAtUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(ur => ur.CreatedAtUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(ur => ur.UpdatedAtUtc).HasColumnType("datetime2(0)");
+        builder.Property(ur => ur.ExpiresAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(ur => ur.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(ur => ur.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
         builder.Property(ur => ur.RowVersion).IsRowVersion();
 
         // UNIQUE(UserId, RoleValue) per architecture spec
@@ -63,9 +63,9 @@ public sealed class PatientProfileConfiguration : IEntityTypeConfiguration<Patie
         builder.Property(p => p.LastName).HasMaxLength(100).IsRequired();
         builder.Property(p => p.NationalCode).HasMaxLength(10);
         builder.Property(p => p.Notes).HasMaxLength(2000);
-        builder.Property(p => p.DateOfBirth).HasColumnType("datetime2(0)");
-        builder.Property(p => p.CreatedAtUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(p => p.UpdatedAtUtc).HasColumnType("datetime2(0)");
+        builder.Property(p => p.DateOfBirth).HasColumnType("datetimeoffset(0)");
+        builder.Property(p => p.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(p => p.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
         builder.Property(p => p.RowVersion).IsRowVersion();
 
         builder.HasIndex(p => p.UserId).HasDatabaseName("IX_PatientProfiles_UserId");
@@ -86,8 +86,8 @@ public sealed class DentistProfileConfiguration : IEntityTypeConfiguration<Denti
         builder.Property(d => d.LicenseNumber).HasMaxLength(50);
         builder.Property(d => d.Bio).HasMaxLength(2000);
         builder.Property(d => d.IsActive).IsRequired().HasDefaultValue(true);
-        builder.Property(d => d.CreatedAtUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(d => d.UpdatedAtUtc).HasColumnType("datetime2(0)");
+        builder.Property(d => d.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(d => d.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
         builder.Property(d => d.RowVersion).IsRowVersion();
 
         builder.HasIndex(d => d.UserId).HasDatabaseName("IX_DentistProfiles_UserId");

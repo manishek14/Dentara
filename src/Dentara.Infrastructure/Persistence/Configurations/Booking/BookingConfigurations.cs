@@ -15,10 +15,10 @@ public sealed class AppointmentConfiguration : IEntityTypeConfiguration<Appointm
         builder.Property(a => a.DentistId).IsRequired();
         builder.Property(a => a.ServiceId).IsRequired();
         builder.Property(a => a.PublishedSessionId);
-        builder.Property(a => a.StartAtUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(a => a.EndAtUtc).HasColumnType("datetime2(0)").IsRequired();
+        builder.Property(a => a.StartAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(a => a.EndAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
         builder.Property(a => a.StatusValue).IsRequired();
-        builder.Property(a => a.ExpiresAtUtc).HasColumnType("datetime2(0)").IsRequired();
+        builder.Property(a => a.ExpiresAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
 
         // Snapshot fields (ADR-007)
         builder.Property(a => a.ServiceNameSnapshot).HasMaxLength(200).IsRequired();
@@ -32,17 +32,17 @@ public sealed class AppointmentConfiguration : IEntityTypeConfiguration<Appointm
         builder.Property(a => a.TermsSnapshotHash).HasMaxLength(128);
 
         // Lifecycle timestamps
-        builder.Property(a => a.ConfirmedAtUtc).HasColumnType("datetime2(0)");
-        builder.Property(a => a.ExpiredAtUtc).HasColumnType("datetime2(0)");
-        builder.Property(a => a.CancelledAtUtc).HasColumnType("datetime2(0)");
-        builder.Property(a => a.CompletedAtUtc).HasColumnType("datetime2(0)");
-        builder.Property(a => a.NoShowAtUtc).HasColumnType("datetime2(0)");
+        builder.Property(a => a.ConfirmedAtUtc).HasColumnType("datetimeoffset(0)");
+        builder.Property(a => a.ExpiredAtUtc).HasColumnType("datetimeoffset(0)");
+        builder.Property(a => a.CancelledAtUtc).HasColumnType("datetimeoffset(0)");
+        builder.Property(a => a.CompletedAtUtc).HasColumnType("datetimeoffset(0)");
+        builder.Property(a => a.NoShowAtUtc).HasColumnType("datetimeoffset(0)");
 
         builder.Property(a => a.CancelledBy).HasMaxLength(100);
         builder.Property(a => a.CancellationReason).HasMaxLength(500);
 
-        builder.Property(a => a.CreatedAtUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(a => a.UpdatedAtUtc).HasColumnType("datetime2(0)");
+        builder.Property(a => a.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(a => a.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
         builder.Property(a => a.RowVersion).IsRowVersion();
 
         // CHECK constraints per architecture spec
@@ -78,13 +78,13 @@ public sealed class ResourceAllocationConfiguration : IEntityTypeConfiguration<R
         builder.Property(r => r.AppointmentId).IsRequired();
         builder.Property(r => r.ResourceId).IsRequired();
         builder.Property(r => r.ResourceTypeSnapshotValue).IsRequired();
-        builder.Property(r => r.StartAtUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(r => r.EndAtUtc).HasColumnType("datetime2(0)").IsRequired();
+        builder.Property(r => r.StartAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(r => r.EndAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
         builder.Property(r => r.StatusValue).IsRequired();
-        builder.Property(r => r.ReleasedAtUtc).HasColumnType("datetime2(0)");
+        builder.Property(r => r.ReleasedAtUtc).HasColumnType("datetimeoffset(0)");
         builder.Property(r => r.ReleaseReason).HasMaxLength(500);
-        builder.Property(r => r.CreatedAtUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(r => r.UpdatedAtUtc).HasColumnType("datetime2(0)");
+        builder.Property(r => r.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(r => r.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
         builder.Property(r => r.RowVersion).IsRowVersion();
 
         builder.ToTable(r => r.HasCheckConstraint(
@@ -114,12 +114,12 @@ public sealed class AppointmentEventConfiguration : IEntityTypeConfiguration<App
 
         builder.Property(e => e.AppointmentId).IsRequired();
         builder.Property(e => e.EventTypeValue).IsRequired();
-        builder.Property(e => e.OccurredAtUtc).HasColumnType("datetime2(0)").IsRequired();
+        builder.Property(e => e.OccurredAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
         builder.Property(e => e.Notes).HasMaxLength(1000);
         builder.Property(e => e.PayloadJson).HasMaxLength(int.MaxValue);
         builder.Property(e => e.CorrelationId).HasMaxLength(100);
-        builder.Property(e => e.CreatedAtUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(e => e.UpdatedAtUtc).HasColumnType("datetime2(0)");
+        builder.Property(e => e.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(e => e.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
         builder.Property(e => e.RowVersion).IsRowVersion();
 
         builder.ToTable(e => e.HasCheckConstraint(

@@ -16,10 +16,10 @@ public sealed class WorkScheduleConfiguration : IEntityTypeConfiguration<WorkSch
         builder.Property(w => w.StartTime).HasColumnType("time").IsRequired();
         builder.Property(w => w.EndTime).HasColumnType("time").IsRequired();
         builder.Property(w => w.IsActive).IsRequired().HasDefaultValue(true);
-        builder.Property(w => w.EffectiveFromUtc).HasColumnType("datetime2(0)");
-        builder.Property(w => w.EffectiveUntilUtc).HasColumnType("datetime2(0)");
-        builder.Property(w => w.CreatedAtUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(w => w.UpdatedAtUtc).HasColumnType("datetime2(0)");
+        builder.Property(w => w.EffectiveFromUtc).HasColumnType("datetimeoffset(0)");
+        builder.Property(w => w.EffectiveUntilUtc).HasColumnType("datetimeoffset(0)");
+        builder.Property(w => w.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(w => w.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
         builder.Property(w => w.RowVersion).IsRowVersion();
 
         // CHECK constraints per architecture spec
@@ -43,15 +43,17 @@ public sealed class ScheduleExceptionConfiguration : IEntityTypeConfiguration<Sc
         builder.ToTable("ScheduleExceptions");
         builder.HasKey(e => e.Id);
 
-        builder.Property(e => e.DentistId).IsRequired(false); // null = clinic-wide
+        builder.Property(e => e.DentistId).IsRequired(); // Guid.Empty = clinic-wide; CHECK constraints enforce semantics
+        // Note: DentistId is non-nullable Guid in domain; Guid.Empty represents clinic-wide.
+        // This is intentional — a nullable Guid? would complicate the domain model.
         builder.Property(e => e.TypeValue).IsRequired();
-        builder.Property(e => e.EffectiveFromUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(e => e.EffectiveUntilUtc).HasColumnType("datetime2(0)").IsRequired();
+        builder.Property(e => e.EffectiveFromUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(e => e.EffectiveUntilUtc).HasColumnType("datetimeoffset(0)").IsRequired();
         builder.Property(e => e.WindowStartTime).HasColumnType("time");
         builder.Property(e => e.WindowEndTime).HasColumnType("time");
         builder.Property(e => e.Reason).HasMaxLength(500);
-        builder.Property(e => e.CreatedAtUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(e => e.UpdatedAtUtc).HasColumnType("datetime2(0)");
+        builder.Property(e => e.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(e => e.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
         builder.Property(e => e.RowVersion).IsRowVersion();
 
         builder.ToTable(e => e.HasCheckConstraint(
@@ -78,17 +80,17 @@ public sealed class BookingWindowConfiguration : IEntityTypeConfiguration<Bookin
         builder.ToTable("BookingWindows");
         builder.HasKey(b => b.Id);
 
-        builder.Property(b => b.OpensAtUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(b => b.ClosesAtUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(b => b.ApplicableDateFromUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(b => b.ApplicableDateUntilUtc).HasColumnType("datetime2(0)").IsRequired();
+        builder.Property(b => b.OpensAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(b => b.ClosesAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(b => b.ApplicableDateFromUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(b => b.ApplicableDateUntilUtc).HasColumnType("datetimeoffset(0)").IsRequired();
         builder.Property(b => b.StatusValue).IsRequired();
         builder.Property(b => b.DentistIdFilter);
         builder.Property(b => b.Description).HasMaxLength(500);
-        builder.Property(b => b.OpenedAtUtc).HasColumnType("datetime2(0)");
-        builder.Property(b => b.ClosedAtUtc).HasColumnType("datetime2(0)");
-        builder.Property(b => b.CreatedAtUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(b => b.UpdatedAtUtc).HasColumnType("datetime2(0)");
+        builder.Property(b => b.OpenedAtUtc).HasColumnType("datetimeoffset(0)");
+        builder.Property(b => b.ClosedAtUtc).HasColumnType("datetimeoffset(0)");
+        builder.Property(b => b.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(b => b.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
         builder.Property(b => b.RowVersion).IsRowVersion();
 
         builder.ToTable(b => b.HasCheckConstraint(
@@ -116,13 +118,13 @@ public sealed class PublishedSessionConfiguration : IEntityTypeConfiguration<Pub
 
         builder.Property(p => p.BookingWindowId).IsRequired();
         builder.Property(p => p.DentistId).IsRequired();
-        builder.Property(p => p.StartAtUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(p => p.EndAtUtc).HasColumnType("datetime2(0)").IsRequired();
+        builder.Property(p => p.StartAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(p => p.EndAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
         builder.Property(p => p.IdempotencyKey).HasMaxLength(200).IsRequired();
         builder.Property(p => p.HasEverBeenBooked).IsRequired().HasDefaultValue(false);
-        builder.Property(p => p.PublishedAtUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(p => p.CreatedAtUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(p => p.UpdatedAtUtc).HasColumnType("datetime2(0)");
+        builder.Property(p => p.PublishedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(p => p.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(p => p.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
         builder.Property(p => p.RowVersion).IsRowVersion();
 
         // UNIQUE on IdempotencyKey — prevents duplicate session generation per ADR-006

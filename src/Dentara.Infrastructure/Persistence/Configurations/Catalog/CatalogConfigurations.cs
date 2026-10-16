@@ -18,8 +18,8 @@ public sealed class ServiceConfiguration : IEntityTypeConfiguration<Service>
         builder.Property(s => s.Currency).HasMaxLength(3).IsRequired();
         builder.Property(s => s.IsActive).IsRequired().HasDefaultValue(true);
         builder.Property(s => s.Version).IsRequired();
-        builder.Property(s => s.CreatedAtUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(s => s.UpdatedAtUtc).HasColumnType("datetime2(0)");
+        builder.Property(s => s.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(s => s.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
         builder.Property(s => s.RowVersion).IsRowVersion();
 
         // CHECK constraints per architecture spec
@@ -50,8 +50,8 @@ public sealed class DentistServiceConfiguration : IEntityTypeConfiguration<Denti
         builder.Property(d => d.PriceAmountOverride).HasColumnType("decimal(18, 2)");
         builder.Property(d => d.CurrencyOverride).HasMaxLength(3);
         builder.Property(d => d.IsActive).IsRequired().HasDefaultValue(true);
-        builder.Property(d => d.CreatedAtUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(d => d.UpdatedAtUtc).HasColumnType("datetime2(0)");
+        builder.Property(d => d.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(d => d.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
         builder.Property(d => d.RowVersion).IsRowVersion();
 
         // UNIQUE(DentistId, ServiceId)
@@ -80,8 +80,8 @@ public sealed class ClinicResourceConfiguration : IEntityTypeConfiguration<Clini
         builder.Property(r => r.Capacity).IsRequired();
         builder.Property(r => r.IsActive).IsRequired().HasDefaultValue(true);
         builder.Property(r => r.OwnerDentistId);
-        builder.Property(r => r.CreatedAtUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(r => r.UpdatedAtUtc).HasColumnType("datetime2(0)");
+        builder.Property(r => r.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(r => r.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
         builder.Property(r => r.RowVersion).IsRowVersion();
 
         // CHECK: TypeValue must be one of 1,2,3,4
@@ -109,8 +109,8 @@ public sealed class ResourceServiceRequirementConfiguration : IEntityTypeConfigu
         builder.Property(r => r.QuantityRequired).IsRequired();
         builder.Property(r => r.RequireDentistOwned).IsRequired().HasDefaultValue(false);
         builder.Property(r => r.SpecificResourceId);
-        builder.Property(r => r.CreatedAtUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(r => r.UpdatedAtUtc).HasColumnType("datetime2(0)");
+        builder.Property(r => r.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(r => r.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
         builder.Property(r => r.RowVersion).IsRowVersion();
 
         builder.ToTable(r => r.HasCheckConstraint(

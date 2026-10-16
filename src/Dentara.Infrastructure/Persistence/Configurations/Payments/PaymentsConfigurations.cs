@@ -20,14 +20,14 @@ public sealed class PaymentAttemptConfiguration : IEntityTypeConfiguration<Payme
         builder.Property(p => p.GatewayAuthority).HasMaxLength(200);
         builder.Property(p => p.ProviderTransactionId).HasMaxLength(200);
         builder.Property(p => p.GatewayRedirectUrl).HasMaxLength(1000);
-        builder.Property(p => p.InitiatedAtUtc).HasColumnType("datetime2(0)");
-        builder.Property(p => p.SucceededAtUtc).HasColumnType("datetime2(0)");
-        builder.Property(p => p.FailedAtUtc).HasColumnType("datetime2(0)");
-        builder.Property(p => p.LastCallbackAtUtc).HasColumnType("datetime2(0)");
+        builder.Property(p => p.InitiatedAtUtc).HasColumnType("datetimeoffset(0)");
+        builder.Property(p => p.SucceededAtUtc).HasColumnType("datetimeoffset(0)");
+        builder.Property(p => p.FailedAtUtc).HasColumnType("datetimeoffset(0)");
+        builder.Property(p => p.LastCallbackAtUtc).HasColumnType("datetimeoffset(0)");
         builder.Property(p => p.FailureReason).HasMaxLength(1000);
         builder.Property(p => p.TermsSnapshotHash).HasMaxLength(128);
-        builder.Property(p => p.CreatedAtUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(p => p.UpdatedAtUtc).HasColumnType("datetime2(0)");
+        builder.Property(p => p.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(p => p.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
         builder.Property(p => p.RowVersion).IsRowVersion();
 
         builder.ToTable(p => p.HasCheckConstraint(
@@ -70,13 +70,13 @@ public sealed class RefundConfiguration : IEntityTypeConfiguration<Refund>
         builder.Property(r => r.StatusValue).IsRequired();
         builder.Property(r => r.Reason).HasMaxLength(500).IsRequired();
         builder.Property(r => r.ProviderRefundId).HasMaxLength(200);
-        builder.Property(r => r.RequestedAtUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(r => r.SucceededAtUtc).HasColumnType("datetime2(0)");
-        builder.Property(r => r.FailedAtUtc).HasColumnType("datetime2(0)");
+        builder.Property(r => r.RequestedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(r => r.SucceededAtUtc).HasColumnType("datetimeoffset(0)");
+        builder.Property(r => r.FailedAtUtc).HasColumnType("datetimeoffset(0)");
         builder.Property(r => r.FailureReason).HasMaxLength(1000);
         builder.Property(r => r.CorrelationId).HasMaxLength(100);
-        builder.Property(r => r.CreatedAtUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(r => r.UpdatedAtUtc).HasColumnType("datetime2(0)");
+        builder.Property(r => r.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(r => r.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
         builder.Property(r => r.RowVersion).IsRowVersion();
 
         builder.ToTable(r => r.HasCheckConstraint(
@@ -102,15 +102,15 @@ public sealed class PaymentWebhookEventConfiguration : IEntityTypeConfiguration<
         builder.Property(w => w.ProviderValue).IsRequired();
         builder.Property(w => w.ProviderEventId).HasMaxLength(200).IsRequired();
         builder.Property(w => w.EventType).HasMaxLength(100).IsRequired();
-        builder.Property(w => w.ReceivedAtUtc).HasColumnType("datetime2(0)").IsRequired();
+        builder.Property(w => w.ReceivedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
         builder.Property(w => w.RawPayload).HasMaxLength(int.MaxValue).IsRequired();
         builder.Property(w => w.SignatureHeader).HasMaxLength(2000);
         builder.Property(w => w.SignatureVerified).IsRequired();
         builder.Property(w => w.ProcessedSuccessfully).IsRequired();
         builder.Property(w => w.ProcessingNotes).HasMaxLength(1000);
         builder.Property(w => w.CorrelationId).HasMaxLength(100);
-        builder.Property(w => w.CreatedAtUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(w => w.UpdatedAtUtc).HasColumnType("datetime2(0)");
+        builder.Property(w => w.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(w => w.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
         builder.Property(w => w.RowVersion).IsRowVersion();
 
         builder.ToTable(w => w.HasCheckConstraint(
@@ -138,11 +138,11 @@ public sealed class IdempotencyRecordConfiguration : IEntityTypeConfiguration<Id
         builder.Property(r => r.StatusValue).IsRequired();
         builder.Property(r => r.ResponsePayload).HasMaxLength(int.MaxValue);
         builder.Property(r => r.ResponseStatusCode);
-        builder.Property(r => r.CompletedAtUtc).HasColumnType("datetime2(0)");
-        builder.Property(r => r.ExpiresAtUtc).HasColumnType("datetime2(0)");
+        builder.Property(r => r.CompletedAtUtc).HasColumnType("datetimeoffset(0)");
+        builder.Property(r => r.ExpiresAtUtc).HasColumnType("datetimeoffset(0)");
         builder.Property(r => r.CorrelationId).HasMaxLength(100);
-        builder.Property(r => r.CreatedAtUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(r => r.UpdatedAtUtc).HasColumnType("datetime2(0)");
+        builder.Property(r => r.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(r => r.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
         builder.Property(r => r.RowVersion).IsRowVersion();
 
         builder.ToTable(r => r.HasCheckConstraint(

@@ -23,10 +23,10 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.IsActive).IsRequired().HasDefaultValue(true);
         builder.Property(u => u.IsPhoneVerified).IsRequired().HasDefaultValue(false);
 
-        builder.Property(u => u.CreatedAtUtc).HasColumnType("datetime2(0)").IsRequired();
-        builder.Property(u => u.UpdatedAtUtc).HasColumnType("datetime2(0)");
-        builder.Property(u => u.LastLoginAtUtc).HasColumnType("datetime2(0)");
-        builder.Property(u => u.PhoneVerifiedAtUtc).HasColumnType("datetime2(0)");
+        builder.Property(u => u.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
+        builder.Property(u => u.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
+        builder.Property(u => u.LastLoginAtUtc).HasColumnType("datetimeoffset(0)");
+        builder.Property(u => u.PhoneVerifiedAtUtc).HasColumnType("datetimeoffset(0)");
 
         // RowVersion for optimistic concurrency
         builder.Property(u => u.RowVersion).IsRowVersion();
