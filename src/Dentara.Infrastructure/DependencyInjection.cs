@@ -7,6 +7,9 @@ using Dentara.Domain.Booking;
 using Dentara.Domain.Payments;
 using Dentara.Domain.Scheduling;
 using Dentara.Domain.Catalog;
+using Dentara.Domain.Services.Booking;
+using Dentara.Domain.Services.Scheduling;
+using Dentara.Infrastructure.Booking;
 using Dentara.Infrastructure.Clock;
 using Dentara.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -38,6 +41,10 @@ public static class DependencyInjection
 
         // Idempotency service
         services.AddScoped<IIdempotencyService, SqlIdempotencyService>();
+
+        // Domain services
+        services.AddScoped<IBookingTransactionService, SqlBookingTransactionService>();
+        services.AddScoped<ICancellationService, SqlCancellationService>();
 
         return services;
     }
