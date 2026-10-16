@@ -46,6 +46,18 @@ public static class DependencyInjection
         services.AddScoped<IBookingTransactionService, SqlBookingTransactionService>();
         services.AddScoped<ICancellationService, SqlCancellationService>();
 
+        // Gateway adapters (sandbox for dev; swap to real adapters in production)
+        services.AddScoped<IPaymentGateway, Gateways.Payments.SandboxPaymentGateway>();
+        services.AddScoped<ISmsGateway, Gateways.Sms.SandboxSmsGateway>();
+
+        // Identity services
+        services.AddScoped<IJwtTokenService, Identity.JwtTokenService>();
+        services.AddScoped<Domain.Services.Identity.IOtpService, Identity.SqlOtpService>();
+        services.AddSingleton<IOtpStore, Identity.InMemoryOtpStore>();
+        services.AddSingleton<IOtpHasher, Identity.Sha256OtpHasher>();
+        services.AddSingleton<IOtpGenerator, Identity.CryptoOtpGenerator>();
+        services.AddScoped<ICurrentUserContext, Identity.NoOpCurrentUserContext>();
+
         return services;
     }
 }
