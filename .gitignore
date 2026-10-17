@@ -37,7 +37,6 @@ packages/
 .env
 .env.local
 appsettings.Local.json
-appsettings.Development.json
 
 ## EF Core
 *.dbmdl

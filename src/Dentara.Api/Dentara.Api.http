@@ -3,9 +3,137 @@
 
 @host = https://localhost:5001
 @devHost = http://localhost:5000
+@correlationId = {{$guid}}
 
-### Health check
+### Health check (no auth)
 GET {{devHost}}/health
 Accept: application/json
+X-Correlation-Id: {{correlationId}}
+
+### ──────────── IDENTITY ────────────
+
+### Request OTP for login
+POST {{devHost}}/api/identity/otp/request
+Content-Type: application/json
+X-Correlation-Id: {{correlationId}}
+
+{
+  "phoneNumber": "09121234567",
+  "purpose": "login"
+}
+
+### Request OTP for registration
+POST {{devHost}}/api/identity/otp/request
+Content-Type: application/json
+
+{
+  "phoneNumber": "09127654321",
+  "purpose": "register"
+}
+
+### Verify OTP — replace code with what was logged in the SandboxSmsGateway output
+POST {{devHost}}/api/identity/otp/verify
+Content-Type: application/json
+
+{
+  "phoneNumber": "09121234567",
+  "purpose": "login",
+  "otpCode": "12345"
+}
+
+### ──────────── APPOINTMENTS ────────────
+### All endpoints below require a Bearer token from /api/identity/otp/verify
+
+@token = YOUR_JWT_TOKEN_HERE
+
+### Create a new appointment
+POST {{devHost}}/api/appointments
+Authorization: Bearer {{token}}
+Content-Type: application/json
+X-Idempotency-Key: {{$guid}}
+X-Correlation-Id: {{correlationId}}
+
+{
+  "dentistId": "00000000-0000-0000-0000-000000000001",
+  "serviceId": "00000000-0000-0000-0000-000000000002",
+  "publishedSessionId": null,
+  "startAtUtc": "2026-11-01T10:00:00Z",
+  "endAtUtc": "2026-11-01T11:00:00Z",
+  "serviceNameSnapshot": "Cavity Filling",
+  "serviceDurationMinutesSnapshot": 60,
+  "priceAmountSnapshot": 500000,
+  "currencySnapshot": "IRR",
+  "dentistDisplayNameSnapshot": "Dr. Ahmadi",
+  "cancellationPolicyVersion": 1,
+  "cancellationFeePercent": 15,
+  "refundablePercent": 85,
+  "termsSnapshotHash": null,
+  "requiredResources": [
+    {
+      "resourceTypeValue": 1,
+      "quantityRequired": 1,
+      "requireDentistOwned": false,
+      "specificResourceId": null
+    }
+  ]
+}
+
+### Cancel an appointment
+POST {{devHost}}/api/appointments/00000000-0000-0000-0000-000000000003/cancel
+Authorization: Bearer {{token}}
+Content-Type: application/json
+X-Idempotency-Key: {{$guid}}
+
+{
+  "reason": "Patient changed mind"
+}
+
+### ──────────── PAYMENTS ────────────
+
+### Initiate a payment
+POST {{devHost}}/api/payments/initiate
+Authorization: Bearer {{token}}
+Content-Type: application/json
+X-Idempotency-Key: {{$guid}}
+
+{
+  "appointmentId": "00000000-0000-0000-0000-000000000003",
+  "amount": 500000,
+  "currency": "IRR",
+  "callbackUrl": "https://myapp.example/payment/callback"
+}
+
+### Process a webhook callback (called BY the gateway, no auth required)
+POST {{devHost}}/api/payments/webhooks
+Content-Type: application/json
+
+{
+  "provider": "Sandbox",
+  "providerEventId": "evt-{{$guid}}",
+  "eventType": "PAYMENT_SUCCEEDED",
+  "rawPayload": "{\"amount\":500000,\"authority\":\"SANDBOX-test\"}",
+  "signatureHeader": null
+}
+
+### Request a refund (Admin/Receptionist only)
+POST {{devHost}}/api/payments/refunds
+Authorization: Bearer {{token}}
+Content-Type: application/json
+X-Idempotency-Key: {{$guid}}
+
+{
+  "paymentAttemptId": "00000000-0000-0000-0000-000000000004",
+  "appointmentId": "00000000-0000-0000-0000-000000000003",
+  "refundAmount": 425000,
+  "currency": "IRR",
+  "reason": "Patient cancelled"
+}
+
+### ──────────── SCHEDULING (Admin only) ────────────
+
+### Manually trigger publication of a booking window
+POST {{devHost}}/api/scheduling/booking-windows/00000000-0000-0000-0000-000000000005/publish
+Authorization: Bearer {{token}}
+Content-Type: application/json
 
 ###
