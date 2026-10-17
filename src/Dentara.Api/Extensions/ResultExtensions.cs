@@ -11,6 +11,25 @@ public static class ResultExtensions
 {
     /// <summary>
     /// Maps a Result<T> to IActionResult:
+    ///   - Success → 200 OK with the value (transformed by mapper)
+    ///   - Failure → 4xx with ErrorResponse (ErrorCode + Message)
+    /// </summary>
+    public static IActionResult ToActionResult<T, TOut>(this Result<T> result, Func<T, TOut> mapper)
+    {
+        if (result.IsSuccess)
+            return new OkObjectResult(mapper(result.Value!));
+
+        var statusCode = MapErrorCodeToStatus(result.ErrorCode);
+        var errorResponse = new
+        {
+            errorCode = result.ErrorCode,
+            message = result.ErrorMessage
+        };
+        return new ObjectResult(errorResponse) { StatusCode = (int)statusCode };
+    }
+
+    /// <summary>
+    /// Maps a Result<T> to IActionResult:
     ///   - Success → 200 OK with the value
     ///   - Failure → 4xx with ErrorResponse (ErrorCode + Message)
     /// </summary>
