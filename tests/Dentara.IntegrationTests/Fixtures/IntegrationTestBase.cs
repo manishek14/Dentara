@@ -31,6 +31,13 @@ public abstract class IntegrationTestBase : IDisposable
     private readonly ILoggerFactory _loggerFactory;
     private bool _disposed;
 
+    /// <summary>
+    /// The root service provider. Test classes use this to create scopes for
+    /// parallel operations (e.g. concurrency tests that need multiple isolated
+    /// scopes running in parallel).
+    /// </summary>
+    protected ServiceProvider RootServiceProvider => _serviceProvider;
+
     protected IntegrationTestBase()
     {
         // Shared in-memory connection — keeps the DB alive for the test's lifetime

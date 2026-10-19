@@ -10,39 +10,28 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
-using System.Text.Json;
+using System.Data;
 
 /// <summary>
 /// SQL Server implementation of IBookingTransactionService. This is the
 /// CRITICAL anti-overbooking implementation per ADR-003.
 ///
-/// Flow (all inside one SQL Server transaction):
-///   1. Begin transaction with SERIALIZABLE isolation (defensive; the
-///      UPDLOCK+HOLDLOCK hints below are the real guard).
-///   2. Lock the dentist row: SELECT … FROM DentistProfiles WITH (UPDLOCK,
-///      HOLDLOCK) WHERE Id = @dentistId. This prevents two transactions
-///      from simultaneously booking the same dentist.
-///   3. Lock the required resource rows: SELECT … FROM ClinicResources
-///      WITH (UPDLOCK, HOLDLOCK) WHERE Id IN (…) ORDER BY Id. Order by Id
-///      prevents deadlocks between transactions booking overlapping resources.
-///   4. Check for active appointment overlaps on the dentist:
-///      SELECT COUNT(*) FROM Appointments WITH (HOLDLOCK)
-///      WHERE DentistId = @dentistId AND StatusValue IN (1, 2)
-///        AND StartAtUtc < @endAt AND EndAtUtc > @startAt.
-///      If count > 0 → throw SlotUnavailableException.
-///   5. For each required resource, check for active allocation overlaps:
-///      SELECT COUNT(*) FROM ResourceAllocations WITH (HOLDLOCK)
-///      WHERE ResourceId = @resourceId AND StatusValue = 1
-///        AND StartAtUtc < @endAt AND EndAtUtc > @startAt.
-///      If count + requestedQuantity > resource.Capacity → throw
-///      ResourceUnavailableException.
-///   6. INSERT the Appointment row.
-///   7. INSERT all ResourceAllocation rows.
-///   8. INSERT AppointmentEvent rows (Created, PaymentWindowStarted).
-///   9. COMMIT the transaction.
+/// Two execution paths:
+///   - SQL Server (production): uses raw SQL with UPDLOCK+HOLDLOCK hints.
+///   - SQLite (testing): uses EF Core LINQ queries with SERIALIZABLE isolation
+///     via BEGIN IMMEDIATE TRANSACTION. SQLite doesn't support lock hints,
+///     but BEGIN IMMEDIATE acquires a write lock that achieves equivalent
+///     serialization for our purposes.
 ///
-/// If any step fails, the entire transaction rolls back — no partial
-/// bookings, no orphan allocations.
+/// Flow (all inside one transaction):
+///   1. Begin transaction with SERIALIZABLE isolation.
+///   2. Lock the dentist row (UPDLOCK+HOLDLOCK on SQL Server, or implicit
+///      write lock via BEGIN IMMEDIATE on SQLite).
+///   3. Lock the required resource rows (ordered by Id to prevent deadlocks).
+///   4. Check for active appointment overlaps on the dentist.
+///   5. Check for active allocation overlaps on each resource.
+///   6. INSERT the Appointment + all ResourceAllocations + AppointmentEvents.
+///   7. Commit (or rollback on any failure).
 ///
 /// CRITICAL: NO external calls (payment gateway, SMS) happen inside this
 /// transaction. The transaction is short and only touches the database.
@@ -63,6 +52,9 @@ public sealed class SqlBookingTransactionService : IBookingTransactionService
         _logger = logger;
     }
 
+    private bool IsSqlite =>
+        _dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
+
     public async Task<Appointment> ReserveAppointmentAsync(
         BookingRequest request,
         CancellationToken cancellationToken = default)
@@ -74,24 +66,24 @@ public sealed class SqlBookingTransactionService : IBookingTransactionService
         return await strategy.ExecuteAsync(async () =>
         {
             await using var transaction = await _dbContext.Database
-                .BeginTransactionAsync(System.Data.IsolationLevel.Serializable, cancellationToken);
+                .BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
 
             try
             {
-                // Step 1: Lock the dentist row (UPDLOCK + HOLDLOCK)
-                await LockDentistRowAsync(request.DentistId, transaction.GetDbTransaction(), cancellationToken);
+                // Step 1: Lock the dentist row (or verify it exists with write-lock intent)
+                await LockDentistRowAsync(request.DentistId, transaction, cancellationToken);
 
-                // Step 2: Find and lock required resources (UPDLOCK + HOLDLOCK, ordered by Id)
+                // Step 2: Find and lock required resources (ordered by Id to prevent deadlocks)
                 var resourceLocks = await FindAndLockResourcesAsync(
                     request.DentistId,
                     request.RequiredResources,
-                    transaction.GetDbTransaction(),
+                    transaction,
                     cancellationToken);
 
                 // Step 3: Check appointment overlap on the dentist
                 await EnsureDentistAvailableAsync(
                     request.DentistId, request.StartAtUtc, request.EndAtUtc,
-                    transaction.GetDbTransaction(), cancellationToken);
+                    transaction, cancellationToken);
 
                 // Step 4: Check resource allocation overlaps
                 foreach (var (requirement, lockedResourceIds) in resourceLocks)
@@ -100,7 +92,7 @@ public sealed class SqlBookingTransactionService : IBookingTransactionService
                     {
                         await EnsureResourceAvailableAsync(
                             resourceId, request.StartAtUtc, request.EndAtUtc,
-                            transaction.GetDbTransaction(), cancellationToken);
+                            transaction, cancellationToken);
                     }
                 }
 
@@ -143,7 +135,7 @@ public sealed class SqlBookingTransactionService : IBookingTransactionService
                     }
                 }
 
-                // Step 7: Save changes (this persists Appointment + ResourceAllocations + AppointmentEvents)
+                // Step 7: Save changes
                 await _dbContext.SaveChangesAsync(cancellationToken);
 
                 // Step 8: Commit
@@ -166,14 +158,26 @@ public sealed class SqlBookingTransactionService : IBookingTransactionService
         });
     }
 
-    private async Task LockDentistRowAsync(Guid dentistId, System.Data.Common.DbTransaction transaction, CancellationToken ct)
+    private async Task LockDentistRowAsync(
+        Guid dentistId, IDbContextTransaction transaction, CancellationToken ct)
     {
+        if (IsSqlite)
+        {
+            // SQLite: BEGIN IMMEDIATE already holds a write lock. Just verify the dentist exists.
+            var dentist = await _dbContext.DentistProfiles
+                .FirstOrDefaultAsync(d => d.Id == dentistId && d.IsActive, ct);
+            if (dentist == null)
+                throw new DentistNotAvailableException(dentistId, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
+            return;
+        }
+
+        // SQL Server: use UPDLOCK+HOLDLOCK hints
         var sql = @"
             SELECT TOP 1 1 FROM DentistProfiles WITH (UPDLOCK, HOLDLOCK)
             WHERE Id = @dentistId AND IsActive = 1";
 
         await using var cmd = _dbContext.Database.GetDbConnection().CreateCommand();
-        cmd.Transaction = transaction;
+        cmd.Transaction = transaction.GetDbTransaction();
         cmd.CommandText = sql;
         cmd.Parameters.Add(new SqlParameter("@dentistId", dentistId));
 
@@ -185,7 +189,7 @@ public sealed class SqlBookingTransactionService : IBookingTransactionService
     private async Task<List<(ResourceRequirementItem Requirement, List<Guid> LockedResourceIds)>> FindAndLockResourcesAsync(
         Guid dentistId,
         IReadOnlyList<ResourceRequirementItem> requirements,
-        System.Data.Common.DbTransaction transaction,
+        IDbContextTransaction transaction,
         CancellationToken ct)
     {
         var result = new List<(ResourceRequirementItem, List<Guid>)>();
@@ -196,19 +200,16 @@ public sealed class SqlBookingTransactionService : IBookingTransactionService
 
             if (requirement.SpecificResourceId.HasValue)
             {
-                // Lock the specific resource
                 lockedIds = await LockSpecificResourceAsync(
                     requirement.SpecificResourceId.Value, transaction, ct);
             }
             else if (requirement.RequireDentistOwned)
             {
-                // Lock any dentist-owned resource of the required type
                 lockedIds = await LockDentistOwnedResourcesAsync(
                     dentistId, requirement.ResourceTypeValue, requirement.QuantityRequired, transaction, ct);
             }
             else
             {
-                // Lock any shared resource of the required type
                 lockedIds = await LockSharedResourcesAsync(
                     requirement.ResourceTypeValue, requirement.QuantityRequired, transaction, ct);
             }
@@ -226,15 +227,24 @@ public sealed class SqlBookingTransactionService : IBookingTransactionService
     }
 
     private async Task<List<Guid>> LockSpecificResourceAsync(
-        Guid resourceId, System.Data.Common.DbTransaction transaction, CancellationToken ct)
+        Guid resourceId, IDbContextTransaction transaction, CancellationToken ct)
     {
+        if (IsSqlite)
+        {
+            var r = await _dbContext.ClinicResources
+                .Where(x => x.Id == resourceId && x.IsActive)
+                .Select(x => x.Id)
+                .ToListAsync(ct);
+            return r;
+        }
+
         var sql = @"
             SELECT Id FROM ClinicResources WITH (UPDLOCK, HOLDLOCK)
             WHERE Id = @resourceId AND IsActive = 1
             ORDER BY Id";
 
         await using var cmd = _dbContext.Database.GetDbConnection().CreateCommand();
-        cmd.Transaction = transaction;
+        cmd.Transaction = transaction.GetDbTransaction();
         cmd.CommandText = sql;
         cmd.Parameters.Add(new SqlParameter("@resourceId", resourceId));
 
@@ -246,15 +256,25 @@ public sealed class SqlBookingTransactionService : IBookingTransactionService
     }
 
     private async Task<List<Guid>> LockDentistOwnedResourcesAsync(
-        Guid dentistId, int resourceTypeValue, int quantity, System.Data.Common.DbTransaction transaction, CancellationToken ct)
+        Guid dentistId, int resourceTypeValue, int quantity, IDbContextTransaction transaction, CancellationToken ct)
     {
+        if (IsSqlite)
+        {
+            return await _dbContext.ClinicResources
+                .Where(x => x.TypeValue == resourceTypeValue && x.IsActive && x.OwnerDentistId == dentistId)
+                .OrderBy(x => x.Id)
+                .Take(quantity)
+                .Select(x => x.Id)
+                .ToListAsync(ct);
+        }
+
         var sql = @"
             SELECT TOP (@quantity) Id FROM ClinicResources WITH (UPDLOCK, HOLDLOCK)
             WHERE TypeValue = @typeValue AND IsActive = 1 AND OwnerDentistId = @dentistId
             ORDER BY Id";
 
         await using var cmd = _dbContext.Database.GetDbConnection().CreateCommand();
-        cmd.Transaction = transaction;
+        cmd.Transaction = transaction.GetDbTransaction();
         cmd.CommandText = sql;
         cmd.Parameters.Add(new SqlParameter("@quantity", quantity));
         cmd.Parameters.Add(new SqlParameter("@typeValue", resourceTypeValue));
@@ -268,15 +288,25 @@ public sealed class SqlBookingTransactionService : IBookingTransactionService
     }
 
     private async Task<List<Guid>> LockSharedResourcesAsync(
-        int resourceTypeValue, int quantity, System.Data.Common.DbTransaction transaction, CancellationToken ct)
+        int resourceTypeValue, int quantity, IDbContextTransaction transaction, CancellationToken ct)
     {
+        if (IsSqlite)
+        {
+            return await _dbContext.ClinicResources
+                .Where(x => x.TypeValue == resourceTypeValue && x.IsActive && x.OwnerDentistId == null)
+                .OrderBy(x => x.Id)
+                .Take(quantity)
+                .Select(x => x.Id)
+                .ToListAsync(ct);
+        }
+
         var sql = @"
             SELECT TOP (@quantity) Id FROM ClinicResources WITH (UPDLOCK, HOLDLOCK)
             WHERE TypeValue = @typeValue AND IsActive = 1 AND OwnerDentistId IS NULL
             ORDER BY Id";
 
         await using var cmd = _dbContext.Database.GetDbConnection().CreateCommand();
-        cmd.Transaction = transaction;
+        cmd.Transaction = transaction.GetDbTransaction();
         cmd.CommandText = sql;
         cmd.Parameters.Add(new SqlParameter("@quantity", quantity));
         cmd.Parameters.Add(new SqlParameter("@typeValue", resourceTypeValue));
@@ -290,56 +320,139 @@ public sealed class SqlBookingTransactionService : IBookingTransactionService
 
     private async Task EnsureDentistAvailableAsync(
         Guid dentistId, DateTimeOffset startUtc, DateTimeOffset endUtc,
-        System.Data.Common.DbTransaction transaction, CancellationToken ct)
+        IDbContextTransaction transaction, CancellationToken ct)
     {
-        var sql = @"
+        if (IsSqlite)
+        {
+            // Use ADO.NET directly for SQLite — avoids SqlQueryRaw entity-mapping issues.
+            var sql = @"
+                SELECT COUNT(*) FROM Appointments
+                WHERE DentistId = $dentistId
+                  AND StatusValue IN (1, 2)
+                  AND StartAtUtc < $endAt
+                  AND EndAtUtc > $startAt";
+
+            await using var cmd = _dbContext.Database.GetDbConnection().CreateCommand();
+            cmd.Transaction = transaction.GetDbTransaction();
+            cmd.CommandText = sql;
+            var p1 = cmd.CreateParameter();
+            p1.ParameterName = "$dentistId";
+            p1.Value = dentistId;
+            var p2 = cmd.CreateParameter();
+            p2.ParameterName = "$endAt";
+            p2.Value = endUtc;
+            var p3 = cmd.CreateParameter();
+            p3.ParameterName = "$startAt";
+            p3.Value = startUtc;
+            cmd.Parameters.Add(p1);
+            cmd.Parameters.Add(p2);
+            cmd.Parameters.Add(p3);
+
+            var countObj = await cmd.ExecuteScalarAsync(ct);
+            var count = countObj == null ? 0 : Convert.ToInt32(countObj);
+            if (count > 0)
+                throw new SlotUnavailableException(dentistId, startUtc, endUtc);
+            return;
+        }
+
+        var sqlServerSql = @"
             SELECT COUNT(*) FROM Appointments WITH (HOLDLOCK)
             WHERE DentistId = @dentistId
               AND StatusValue IN (1, 2)
               AND StartAtUtc < @endAt
               AND EndAtUtc > @startAt";
 
-        await using var cmd = _dbContext.Database.GetDbConnection().CreateCommand();
-        cmd.Transaction = transaction;
-        cmd.CommandText = sql;
-        cmd.Parameters.Add(new SqlParameter("@dentistId", dentistId));
-        cmd.Parameters.Add(new SqlParameter("@startAt", startUtc));
-        cmd.Parameters.Add(new SqlParameter("@endAt", endUtc));
+        await using var sqlServerCmd = _dbContext.Database.GetDbConnection().CreateCommand();
+        sqlServerCmd.Transaction = transaction.GetDbTransaction();
+        sqlServerCmd.CommandText = sqlServerSql;
+        sqlServerCmd.Parameters.Add(new SqlParameter("@dentistId", dentistId));
+        sqlServerCmd.Parameters.Add(new SqlParameter("@startAt", startUtc));
+        sqlServerCmd.Parameters.Add(new SqlParameter("@endAt", endUtc));
 
-        var count = (int)(await cmd.ExecuteScalarAsync(ct))!;
-        if (count > 0)
+        var result = (int)(await sqlServerCmd.ExecuteScalarAsync(ct))!;
+        if (result > 0)
             throw new SlotUnavailableException(dentistId, startUtc, endUtc);
     }
 
     private async Task EnsureResourceAvailableAsync(
         Guid resourceId, DateTimeOffset startUtc, DateTimeOffset endUtc,
-        System.Data.Common.DbTransaction transaction, CancellationToken ct)
+        IDbContextTransaction transaction, CancellationToken ct)
     {
         // Get resource capacity
-        var capacitySql = "SELECT Capacity FROM ClinicResources WITH (HOLDLOCK) WHERE Id = @resourceId";
-        await using var capCmd = _dbContext.Database.GetDbConnection().CreateCommand();
-        capCmd.Transaction = transaction;
-        capCmd.CommandText = capacitySql;
-        capCmd.Parameters.Add(new SqlParameter("@resourceId", resourceId));
-        var capacityObj = await capCmd.ExecuteScalarAsync(ct);
-        var capacity = capacityObj == null ? 0 : Convert.ToInt32(capacityObj);
+        int capacity;
+        if (IsSqlite)
+        {
+            var capSql = "SELECT Capacity FROM ClinicResources WHERE Id = $resourceId";
+            await using var capCmd = _dbContext.Database.GetDbConnection().CreateCommand();
+            capCmd.Transaction = transaction.GetDbTransaction();
+            capCmd.CommandText = capSql;
+            var capP = capCmd.CreateParameter();
+            capP.ParameterName = "$resourceId";
+            capP.Value = resourceId;
+            capCmd.Parameters.Add(capP);
+            var capacityObj = await capCmd.ExecuteScalarAsync(ct);
+            capacity = capacityObj == null ? 0 : Convert.ToInt32(capacityObj);
+        }
+        else
+        {
+            var capSql = "SELECT Capacity FROM ClinicResources WITH (HOLDLOCK) WHERE Id = @resourceId";
+            await using var capCmd = _dbContext.Database.GetDbConnection().CreateCommand();
+            capCmd.Transaction = transaction.GetDbTransaction();
+            capCmd.CommandText = capSql;
+            capCmd.Parameters.Add(new SqlParameter("@resourceId", resourceId));
+            var capacityObj = await capCmd.ExecuteScalarAsync(ct);
+            capacity = capacityObj == null ? 0 : Convert.ToInt32(capacityObj);
+        }
 
         // Count active overlapping allocations
-        var overlapSql = @"
-            SELECT COUNT(*) FROM ResourceAllocations WITH (HOLDLOCK)
-            WHERE ResourceId = @resourceId
-              AND StatusValue = 1
-              AND StartAtUtc < @endAt
-              AND EndAtUtc > @startAt";
+        int activeCount;
+        if (IsSqlite)
+        {
+            var overlapSql = @"
+                SELECT COUNT(*) FROM ResourceAllocations
+                WHERE ResourceId = $resourceId
+                  AND StatusValue = 1
+                  AND StartAtUtc < $endAt
+                  AND EndAtUtc > $startAt";
 
-        await using var overlapCmd = _dbContext.Database.GetDbConnection().CreateCommand();
-        overlapCmd.Transaction = transaction;
-        overlapCmd.CommandText = overlapSql;
-        overlapCmd.Parameters.Add(new SqlParameter("@resourceId", resourceId));
-        overlapCmd.Parameters.Add(new SqlParameter("@startAt", startUtc));
-        overlapCmd.Parameters.Add(new SqlParameter("@endAt", endUtc));
+            await using var overlapCmd = _dbContext.Database.GetDbConnection().CreateCommand();
+            overlapCmd.Transaction = transaction.GetDbTransaction();
+            overlapCmd.CommandText = overlapSql;
+            var p1 = overlapCmd.CreateParameter();
+            p1.ParameterName = "$resourceId";
+            p1.Value = resourceId;
+            var p2 = overlapCmd.CreateParameter();
+            p2.ParameterName = "$endAt";
+            p2.Value = endUtc;
+            var p3 = overlapCmd.CreateParameter();
+            p3.ParameterName = "$startAt";
+            p3.Value = startUtc;
+            overlapCmd.Parameters.Add(p1);
+            overlapCmd.Parameters.Add(p2);
+            overlapCmd.Parameters.Add(p3);
 
-        var activeCount = (int)(await overlapCmd.ExecuteScalarAsync(ct))!;
+            var overlapObj = await overlapCmd.ExecuteScalarAsync(ct);
+            activeCount = overlapObj == null ? 0 : Convert.ToInt32(overlapObj);
+        }
+        else
+        {
+            var overlapSql = @"
+                SELECT COUNT(*) FROM ResourceAllocations WITH (HOLDLOCK)
+                WHERE ResourceId = @resourceId
+                  AND StatusValue = 1
+                  AND StartAtUtc < @endAt
+                  AND EndAtUtc > @startAt";
+
+            await using var overlapCmd = _dbContext.Database.GetDbConnection().CreateCommand();
+            overlapCmd.Transaction = transaction.GetDbTransaction();
+            overlapCmd.CommandText = overlapSql;
+            overlapCmd.Parameters.Add(new SqlParameter("@resourceId", resourceId));
+            overlapCmd.Parameters.Add(new SqlParameter("@startAt", startUtc));
+            overlapCmd.Parameters.Add(new SqlParameter("@endAt", endUtc));
+
+            activeCount = (int)(await overlapCmd.ExecuteScalarAsync(ct))!;
+        }
+
         if (activeCount >= capacity)
             throw new ResourceUnavailableException(resourceId, startUtc, endUtc);
     }
