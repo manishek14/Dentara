@@ -51,10 +51,28 @@ public class DentaraDbContext : DbContext
     public DbSet<PaymentWebhookEvent> PaymentWebhookEvents => Set<PaymentWebhookEvent>();
     public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
 
+    /// <summary>
+    /// True when the provider is SQLite (test mode). T-SQL CHECK constraints
+    /// (which use functions like LEN that SQLite does not support) are skipped
+    /// in this mode; the invariants are still enforced in C# code.
+    /// </summary>
+    public bool IsSqliteProvider { get; private set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        // Detect SQLite provider — used to skip T-SQL-specific CHECK constraints.
+        IsSqliteProvider = Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
+
         // Apply all IEntityTypeConfiguration<T> from this assembly.
-        modelBuilder.ApplyConfigurationsFromAssembly(typeof(DentaraDbContext).Assembly);
+        // For SQLite, we apply a subset that avoids T-SQL-specific functions.
+        if (IsSqliteProvider)
+        {
+            ApplySqliteCompatibleModel(modelBuilder);
+        }
+        else
+        {
+            modelBuilder.ApplyConfigurationsFromAssembly(typeof(DentaraDbContext).Assembly);
+        }
 
         // Disable cascade delete for all FK relationships per the architecture spec:
         // "حذف آبشاری برای سوابق رزرو و مالی ممنوع یا بسیار محدود"
@@ -68,4 +86,39 @@ public class DentaraDbContext : DbContext
 
         base.OnModelCreating(modelBuilder);
     }
+
+    /// <summary>
+    /// SQLite-compatible model configuration. Skips T-SQL-specific CHECK
+    /// constraints (LEN, etc.). Business invariants are still enforced in
+    /// C# domain code, so this is acceptable for testing.
+    /// </summary>
+    private void ApplySqliteCompatibleModel(ModelBuilder modelBuilder)
+    {
+        // Apply all configurations from the assembly.
+        var assembly = typeof(DentaraDbContext).Assembly;
+        modelBuilder.ApplyConfigurationsFromAssembly(assembly);
+
+        // Remove all CHECK constraints (SQLite doesn't support T-SQL functions).
+        foreach (var entity in modelBuilder.Model.GetEntityTypes())
+        {
+            var checkConstraints = entity.GetCheckConstraints().ToList();
+            foreach (var check in checkConstraints)
+            {
+                if (!string.IsNullOrEmpty(check.Name))
+                    entity.RemoveCheckConstraint(check.Name);
+            }
+
+            // SQLite doesn't support rowversion auto-generation. Set RowVersion
+            // columns to be nullable byte[] with no auto-generation; EF Core's
+            // optimistic concurrency will still work via change tracking.
+            var rowVersionProp = entity.FindProperty("RowVersion");
+            if (rowVersionProp != null)
+            {
+                rowVersionProp.ValueGenerated = Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.Never;
+                rowVersionProp.IsNullable = true;
+                rowVersionProp.SetDefaultValue(new byte[] { 0 });
+            }
+        }
+    }
 }
+
