@@ -32,6 +32,12 @@ public abstract class IntegrationTestBase : IDisposable
     private bool _disposed;
 
     /// <summary>
+    /// A deterministic clock for tests. Set UtcNow to control time-based logic.
+    /// Initialized before DI container so it can be passed to AddInfrastructureTest.
+    /// </summary>
+    protected TestClock Clock { get; } = new();
+
+    /// <summary>
     /// The root service provider. Test classes use this to create scopes for
     /// parallel operations (e.g. concurrency tests that need multiple isolated
     /// scopes running in parallel).
@@ -70,7 +76,7 @@ public abstract class IntegrationTestBase : IDisposable
     {
         // Default: register all production services with SQLite override
         services.AddApplication();
-        services.AddInfrastructureTest(_connection);
+        services.AddInfrastructureTest(_connection, Clock);
     }
 
     /// <summary>
@@ -100,11 +106,6 @@ public abstract class IntegrationTestBase : IDisposable
         using var scope = _serviceProvider.CreateScope();
         return await action(scope.ServiceProvider);
     }
-
-    /// <summary>
-    /// A deterministic clock for tests. Set UtcNow to control time-based logic.
-    /// </summary>
-    protected TestClock Clock { get; } = new();
 
     public void Dispose()
     {

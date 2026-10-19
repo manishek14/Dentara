@@ -108,15 +108,19 @@ public class DentaraDbContext : DbContext
                     entity.RemoveCheckConstraint(check.Name);
             }
 
-            // SQLite doesn't support rowversion auto-generation. Set RowVersion
-            // columns to be nullable byte[] with no auto-generation; EF Core's
-            // optimistic concurrency will still work via change tracking.
+            // SQLite doesn't support SQL Server's rowversion. Make the column
+            // nullable with a default value, and disable concurrency token.
+            // Production SQL Server uses real rowversion columns with
+            // IsRowVersion() — which we leave in place from the configurations.
             var rowVersionProp = entity.FindProperty("RowVersion");
             if (rowVersionProp != null)
             {
                 rowVersionProp.ValueGenerated = Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.Never;
                 rowVersionProp.IsNullable = true;
                 rowVersionProp.SetDefaultValue(new byte[] { 0 });
+                rowVersionProp.IsConcurrencyToken = false;
+                rowVersionProp.SetBeforeSaveBehavior(Microsoft.EntityFrameworkCore.Metadata.PropertySaveBehavior.Save);
+                rowVersionProp.SetAfterSaveBehavior(Microsoft.EntityFrameworkCore.Metadata.PropertySaveBehavior.Save);
             }
         }
     }
