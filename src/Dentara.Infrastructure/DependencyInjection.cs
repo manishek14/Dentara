@@ -8,9 +8,12 @@ using Dentara.Domain.Payments;
 using Dentara.Domain.Scheduling;
 using Dentara.Domain.Catalog;
 using Dentara.Domain.Services.Booking;
+using Dentara.Domain.Services.Payments;
 using Dentara.Domain.Services.Scheduling;
+using Dentara.Infrastructure.BackgroundJobs;
 using Dentara.Infrastructure.Booking;
 using Dentara.Infrastructure.Clock;
+using Dentara.Infrastructure.Payments;
 using Dentara.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -57,6 +60,14 @@ public static class DependencyInjection
         services.AddSingleton<IOtpHasher, Identity.Sha256OtpHasher>();
         services.AddSingleton<IOtpGenerator, Identity.CryptoOtpGenerator>();
         services.AddScoped<ICurrentUserContext, Identity.NoOpCurrentUserContext>();
+
+        // Payment verification service (used by the ExpiryWorker per ADR-004)
+        services.AddScoped<IPaymentVerificationService, StubPaymentVerificationService>();
+
+        // Background workers — registered as hosted services (singletons).
+        // Each worker creates its own DI scope per iteration so scoped services
+        // (DbContext, repositories) are fresh.
+        services.AddHostedService<AppointmentExpiryWorker>();
 
         return services;
     }
