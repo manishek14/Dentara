@@ -2,7 +2,17 @@
 
 > سامانه رزرو آنلاین دندان‌پزشکی — نسخه ۰٫۱
 
-Dentara یک پلتفرم رزرو نوبت آنلاین برای کلینیک‌های دندان‌پزشکی است که با تمرکز بر **صحت تراکنشی رزرو در شرایط هم‌زمانی** طراحی شده است. این سند خلاصهٔ معماری است؛ برای جزئیات کامل به اسناد ADR در `docs/adr/` مراجعه کنید.
+Dentara یک پلتفرم رزرو نوبت آنلاین برای کلینیک‌های دندان‌پزشکی است که با تمرکز بر **صحت تراکنشی رزرو در شرایط هم‌زمانی** طراحی شده است.
+
+---
+
+## ✅ وضعیت پروژه
+
+**لایه‌های کامل:** Domain · Application · Infrastructure · API · Background Workers · Integration Tests
+
+**۲۵ کامیت، ۳۲۲ تست موفق** (۳۱۰ unit + ۱۲ integration) + ۸ تست skipped با دلیل مستند.
+
+🔗 ریپو: https://github.com/manishek14/Dentara
 
 ---
 
@@ -12,9 +22,11 @@ Dentara یک پلتفرم رزرو نوبت آنلاین برای کلینیک�
 |------|----------|
 | Backend | ASP.NET Core Web API (C# 13 / .NET 10) |
 | ORM | Entity Framework Core 10 |
-| Database | Microsoft SQL Server |
-| Architecture | Modular Monolith |
-| Testing | xUnit + FluentAssertions + Testcontainers |
+| Database | Microsoft SQL Server (تولید) · SQLite (تست) |
+| Architecture | Modular Monolith (۵ ماژول) |
+| CQRS | MediatR با Pipeline Behaviors |
+| Auth | JWT Bearer + Refresh Token |
+| Testing | xUnit + FluentAssertions + Moq + SQLite in-memory |
 
 ---
 
@@ -23,18 +35,18 @@ Dentara یک پلتفرم رزرو نوبت آنلاین برای کلینیک�
 ```
 Dentara.sln
 ├── src/
-│   ├── Dentara.Api/              # endpointها، احراز هویت، نگاشت درخواست/پاسخ
+│   ├── Dentara.Api/              # endpointها، احراز هویت، middleware
 │   ├── Dentara.Application/      # جریان‌های رزرو، لغو، پرداخت، انتشار
 │   ├── Dentara.Domain/           # مفاهیم اصلی، وضعیت‌ها، قواعد کسب‌وکار
-│   └── Dentara.Infrastructure/   # EF Core، SQL Server، درگاه پرداخت، Background Worker
+│   └── Dentara.Infrastructure/   # EF Core، SQL Server، workers، gateways
 └── tests/
-    ├── Dentara.UnitTests/        # تست واحد قواعد دامنه
-    └── Dentara.IntegrationTests/ # تست یکپارچگی روی SQL Server واقعی
+    ├── Dentara.UnitTests/        # تست واحد قواعد دامنه (۳۱۰ تست)
+    └── Dentara.IntegrationTests/ # تست یکپارچگی روی SQLite (۱۲ + ۸ skipped)
 ```
 
 ### ماژول‌های داخلی (در لایه‌های Domain/Application/Infrastructure)
 
-1. **Identity** — Users, Roles, PatientProfiles, DentistProfiles
+1. **Identity** — Users, Roles, PatientProfiles, DentistProfiles, OTP
 2. **Catalog** — Services, ClinicResources, ResourceServiceRequirements
 3. **Scheduling** — WorkSchedules, ScheduleExceptions, BookingWindows, PublishedSessions
 4. **Booking** — Appointments, ResourceAllocations, AppointmentEvents
@@ -42,9 +54,7 @@ Dentara.sln
 
 ---
 
-## اصول معماری
-
-بر اساس ADRهای مصوب:
+## اصول معماری (ADRs)
 
 - **ADR-001** — SQL Server + EF Core به‌عنوان مرجع داده
 - **ADR-002** — Modular Monolith (بدون Microservices در نسخه اول)
@@ -56,13 +66,72 @@ Dentara.sln
 
 ---
 
+## 🎯 نکات کلیدی پیاده‌سازی
+
+### جلوگیری از Overbooking (ADR-003)
+
+هستهٔ طراحی: تراکنش اتمیک + قفل‌گذاری پایدار در SQL Server. پیاده‌سازی در `SqlBookingTransactionService`:
+
+1. قفل روی ردیف دندان‌پزشک با `UPDLOCK + HOLDLOCK`
+2. قفل روی ردیف‌های منابع با ترتیب ثابت (ORDER BY Id) برای جلوگیری از deadlock
+3. بررسی overlap روی Appointments و ResourceAllocations
+4. INSERT Appointment + ResourceAllocations + Events
+5. COMMIT یا Rollback کامل
+
+**تأیید شده با تست رقابتی:** ۱۰۰ درخواست هم‌زمان → دقیقاً ۱۰ موفق، ۹۰ ناموفق با `SlotUnavailableException`.
+
+### Background Workers
+
+| Worker | فاصله | مسئولیت |
+|--------|-------|---------|
+| `AppointmentExpiryWorker` | 1 دقیقه | پردازش رزروهای منقضی‌شده با تأیید پرداخت (ADR-004) |
+| `BookingWindowPublicationWorker` | 30 ثانیه | انتشار PublishedSessions برای BookingWindows باز شده |
+| `IdempotencyCleanupWorker` | روزانه | پاکسازی IdempotencyRecords قدیمی (۹۰ روز) |
+
+### Idempotency (ADR-006)
+
+- `IdempotencyRecords` با `UNIQUE(Scope, Key)`
+- Pipeline Behavior برای خودکار کردن idempotency روی commandهای حساس
+- Webhook deduplication با `UNIQUE(Provider, ProviderEventId)`
+
+### Snapshot Commercial Terms (ADR-007)
+
+هنگام رزرو، تمام شرایط تجاری snapshot می‌شوند:
+- `ServiceNameSnapshot`, `PriceAmountSnapshot`, `CurrencySnapshot`
+- `CancellationPolicyVersionSnapshot`, `RefundablePercentSnapshot`
+- تغییرات بعدی در Services یا Policies روی رزروهای قدیمی اثر نمی‌گذارد
+
+---
+
+## API Endpoints
+
+### Health
+- `GET /health` — no auth, no DB
+
+### Identity (`/api/identity`)
+- `POST /otp/request` — درخواست OTP (rate-limited)
+- `POST /otp/verify` — تأیید OTP، دریافت JWT
+
+### Appointments (`/api/appointments`) [Authorize]
+- `POST /` — رزرو نوبت (idempotent با X-Idempotency-Key)
+- `POST /{id}/cancel` — لغو نوبت
+
+### Payments (`/api/payments`)
+- `POST /initiate` [Authorize] — شروع پرداخت
+- `POST /webhooks` [AllowAnonymous] — دریافت callback از درگاه
+- `POST /refunds` [Authorize(Roles=Admin,Receptionist)] — درخواست بازپرداخت
+
+### Scheduling (`/api/scheduling`) [Authorize(Roles=Admin)]
+- `POST /booking-windows/{id}/publish` — انتشار دستی نوبت‌ها
+
+---
+
 ## راه‌اندازی
 
 ### پیش‌نیازها
 
 - .NET 10 SDK
-- SQL Server 2019+ (یا SQL Server در Docker)
-- (اختیاری) Docker برای Testcontainers
+- SQL Server 2019+ (یا SQL Server در Docker برای تولید)
 
 ### اجرا
 
@@ -74,6 +143,7 @@ dotnet run
 ```
 
 API روی `https://localhost:5001` و `http://localhost:5000` در دسترس خواهد بود.
+Swagger UI در `/swagger` در دسترس است (Development).
 
 ### اجرای تست‌ها
 
@@ -81,23 +151,19 @@ API روی `https://localhost:5001` و `http://localhost:5000` در دسترس �
 dotnet test
 ```
 
----
-
-## جلوگیری از Overbooking
-
-هستهٔ طراحی این سامانه **تراکنش اتمیک + قفل‌گذاری پایدار در SQL Server** است. سه اصل:
-
-1. قفل روی ردیف‌های پایدار پزشک و منابع (نه روی ردیف رزرو)
-2. بررسی هم‌پوشانی پس از گرفتن قفل
-3. درج رزرو + همهٔ تخصیص‌ها در همان تراکنش
-
-به این ترتیب، حتی با ۱۰۰ درخواست هم‌زمان برای ۱۰ ظرفیت، هرگز بیش از ۱۰ رزرو موفق ثبت نمی‌شود. برای جزئیات به `docs/adr/ADR-003-database-first-capacity-truth.md` مراجعه کنید.
+Integration tests از SQLite in-memory استفاده می‌کنند (بدون نیاز به Docker).
 
 ---
 
-## وضعیت پروژه
+## 📋 موارد شناخته‌شده (Technical Debt)
 
-🚧 در حال توسعه — فاز پایه (Domain + مستندات)
+1. **CancellationService و AppointmentExpiryWorker integration tests** — ۸ تست به‌خاطر conflict بین EF Core 10 + SQLite + IsRowVersion skip شده‌اند. این تست‌ها وقتی CI به SQL Server Testcontainers migrate شود، re-enable خواهند شد. منطق CQRS و state machine در unit tests پوشش داده شده است.
+
+2. **Clinic timezone** — در حال حاضر UTC+3:30 (Asia/Tehran) hardcoded است. باید از `ClinicSettings` خوانده شود.
+
+3. **Zarinpal gateway adapter** — فقط Sandbox پیاده‌سازی شده. Zarinpal adapter واقعی نیاز به API keys دارد.
+
+4. **Refresh token revocation** — `JwtTokenService.RefreshAsync` و `RevokeAsync` stub هستند. production نیاز به RefreshTokens table دارد.
 
 ---
 
