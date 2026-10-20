@@ -68,6 +68,9 @@ public abstract class WorkerBase : BackgroundService
     /// Called once per iteration. Implementations should be idempotent — if a
     /// previous iteration was interrupted mid-way, the next one must safely
     /// resume or skip already-processed items.
+    ///
+    /// This method is PUBLIC so tests can invoke a single iteration directly
+    /// without running the full hosted-service loop.
     /// </summary>
-    protected abstract Task ExecuteIterationAsync(CancellationToken stoppingToken);
+    public abstract Task ExecuteIterationAsync(CancellationToken stoppingToken);
 }

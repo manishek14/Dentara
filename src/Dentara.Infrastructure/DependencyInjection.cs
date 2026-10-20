@@ -15,6 +15,7 @@ using Dentara.Infrastructure.Booking;
 using Dentara.Infrastructure.Clock;
 using Dentara.Infrastructure.Payments;
 using Dentara.Infrastructure.Persistence;
+using Dentara.Infrastructure.Scheduling;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -64,10 +65,15 @@ public static class DependencyInjection
         // Payment verification service (used by the ExpiryWorker per ADR-004)
         services.AddScoped<IPaymentVerificationService, StubPaymentVerificationService>();
 
+        // Scheduling publication service (used by the PublicationWorker)
+        services.AddScoped<IPublicationService, SqlPublicationService>();
+
         // Background workers — registered as hosted services (singletons).
         // Each worker creates its own DI scope per iteration so scoped services
         // (DbContext, repositories) are fresh.
         services.AddHostedService<AppointmentExpiryWorker>();
+        services.AddHostedService<BookingWindowPublicationWorker>();
+        services.AddHostedService<IdempotencyCleanupWorker>();
 
         return services;
     }

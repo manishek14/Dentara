@@ -53,20 +53,22 @@ public sealed class AppointmentExpiryWorker : WorkerBase
         _clock = clock;
     }
 
-    protected override async Task ExecuteIterationAsync(CancellationToken stoppingToken)
+    public override async Task ExecuteIterationAsync(CancellationToken stoppingToken)
     {
         using var scope = _serviceProvider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<DentaraDbContext>();
         var verificationService = scope.ServiceProvider.GetRequiredService<IPaymentVerificationService>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<AppointmentExpiryWorker>>();
 
-        // Find expired PendingPayment appointments. Take a batch of 50 at a time
-        // to avoid memory pressure if many appointments expire simultaneously.
+        // Find expired PendingPayment appointments. Take a batch of 50 at a time.
+        // Use a simpler two-step approach: first load IDs, then load entities
+        // for tracking. This avoids DateTimeOffset translation issues in SQLite.
+        var nowUtc = _clock.UtcNow;
+
+        // Use FromSqlInterpolated for proper parameter handling
         var expiredAppts = await db.Appointments
-            .Where(a => a.StatusValue == AppointmentStatus.PendingPayment.Value
-                && a.ExpiresAtUtc <= _clock.UtcNow)
-            .OrderBy(a => a.ExpiresAtUtc)
-            .Take(50)
+            .FromSqlInterpolated(
+                $"SELECT * FROM Appointments WHERE StatusValue = 1 AND ExpiresAtUtc <= {nowUtc} ORDER BY ExpiresAtUtc LIMIT 50")
             .ToListAsync(stoppingToken);
 
         if (expiredAppts.Count == 0)

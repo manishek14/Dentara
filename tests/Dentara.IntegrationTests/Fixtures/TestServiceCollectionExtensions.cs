@@ -5,13 +5,17 @@ using Dentara.Application.Common.Interfaces;
 using Dentara.Domain.Common;
 using Dentara.Domain.Services.Booking;
 using Dentara.Domain.Services.Identity;
+using Dentara.Domain.Services.Payments;
+using Dentara.Domain.Services.Scheduling;
 using Dentara.Infrastructure;
 using Dentara.Infrastructure.Booking;
 using Dentara.Infrastructure.Clock;
 using Dentara.Infrastructure.Gateways.Payments;
 using Dentara.Infrastructure.Gateways.Sms;
 using Dentara.Infrastructure.Identity;
+using Dentara.Infrastructure.Payments;
 using Dentara.Infrastructure.Persistence;
+using Dentara.Infrastructure.Scheduling;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -80,6 +84,13 @@ public static class TestServiceCollectionExtensions
         services.AddSingleton<IOtpHasher, Sha256OtpHasher>();
         services.AddSingleton<IOtpGenerator, CryptoOtpGenerator>();
         services.AddScoped<ICurrentUserContext, NoOpCurrentUserContext>();
+
+        // Payment verification + scheduling publication services
+        services.AddScoped<IPaymentVerificationService, StubPaymentVerificationService>();
+        services.AddScoped<IPublicationService, SqlPublicationService>();
+
+        // Background workers are NOT registered in tests — they're tested
+        // directly via their ExecuteIterationAsync method.
 
         return services;
     }
