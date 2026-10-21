@@ -1,6 +1,7 @@
 namespace Dentara.Infrastructure.Persistence.Configurations.Payments;
 
 using Dentara.Domain.Payments;
+using Dentara.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -28,7 +29,7 @@ public sealed class PaymentAttemptConfiguration : IEntityTypeConfiguration<Payme
         builder.Property(p => p.TermsSnapshotHash).HasMaxLength(128);
         builder.Property(p => p.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
         builder.Property(p => p.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
-        builder.Property(p => p.RowVersion).IsRowVersion();
+        builder.Property(p => p.RowVersion).ConfigureRowVersion();
 
         builder.ToTable(p => p.HasCheckConstraint(
             "CK_PaymentAttempts_AmountPositive",
@@ -77,7 +78,7 @@ public sealed class RefundConfiguration : IEntityTypeConfiguration<Refund>
         builder.Property(r => r.CorrelationId).HasMaxLength(100);
         builder.Property(r => r.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
         builder.Property(r => r.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
-        builder.Property(r => r.RowVersion).IsRowVersion();
+        builder.Property(r => r.RowVersion).ConfigureRowVersion();
 
         builder.ToTable(r => r.HasCheckConstraint(
             "CK_Refunds_AmountPositive",
@@ -111,7 +112,7 @@ public sealed class PaymentWebhookEventConfiguration : IEntityTypeConfiguration<
         builder.Property(w => w.CorrelationId).HasMaxLength(100);
         builder.Property(w => w.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
         builder.Property(w => w.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
-        builder.Property(w => w.RowVersion).IsRowVersion();
+        builder.Property(w => w.RowVersion).ConfigureRowVersion();
 
         builder.ToTable(w => w.HasCheckConstraint(
             "CK_PaymentWebhookEvents_ProviderValue",
@@ -143,7 +144,7 @@ public sealed class IdempotencyRecordConfiguration : IEntityTypeConfiguration<Id
         builder.Property(r => r.CorrelationId).HasMaxLength(100);
         builder.Property(r => r.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
         builder.Property(r => r.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
-        builder.Property(r => r.RowVersion).IsRowVersion();
+        builder.Property(r => r.RowVersion).ConfigureRowVersion();
 
         builder.ToTable(r => r.HasCheckConstraint(
             "CK_IdempotencyRecords_StatusValue",

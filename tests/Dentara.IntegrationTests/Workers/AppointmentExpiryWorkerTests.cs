@@ -72,7 +72,7 @@ public sealed class AppointmentExpiryWorkerTests : IntegrationTestBase
         });
     }
 
-    [Fact(Skip = "EF Core 10 + SQLite + IsRowVersion UPDATE conflict — see class summary")]
+    [Fact]
     public async Task ExpiryWorker_WithNoPayment_TransitionsToExpired()
     {
         var (appointmentId, _) = await CreateExpiredAppointmentAsync();
@@ -87,11 +87,11 @@ public sealed class AppointmentExpiryWorkerTests : IntegrationTestBase
         {
             var db = sp.GetRequiredService<DentaraDbContext>();
             var appt = await db.Appointments.FirstAsync(a => a.Id == appointmentId);
-            appt.Status.Should().Be(AppointmentStatus.Expired);
+            appt.Status.Should().Be(AppointmentStatus.Expired, $"ExpiresAt={appt.ExpiresAtUtc}, Now={Clock.UtcNow}");
         });
     }
 
-    [Fact(Skip = "EF Core 10 + SQLite + IsRowVersion UPDATE conflict — see class summary")]
+    [Fact]
     public async Task ExpiryWorker_WithFailedPayment_TransitionsToExpired()
     {
         var (appointmentId, _) = await CreateExpiredAppointmentAsync();
@@ -126,7 +126,7 @@ public sealed class AppointmentExpiryWorkerTests : IntegrationTestBase
         });
     }
 
-    [Fact(Skip = "EF Core 10 + SQLite + IsRowVersion UPDATE conflict — see class summary")]
+    [Fact]
     public async Task ExpiryWorker_WithUnknownPaymentAndSandbox_VerifiesAndConfirms()
     {
         var (appointmentId, _) = await CreateExpiredAppointmentAsync();
@@ -163,7 +163,7 @@ public sealed class AppointmentExpiryWorkerTests : IntegrationTestBase
         });
     }
 
-    [Fact(Skip = "EF Core 10 + SQLite + IsRowVersion UPDATE conflict — see class summary")]
+    [Fact]
     public async Task ExpiryWorker_WithSucceededPayment_TransitionsToConfirmed()
     {
         var (appointmentId, _) = await CreateExpiredAppointmentAsync();

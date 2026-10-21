@@ -1,6 +1,7 @@
 namespace Dentara.Infrastructure.Persistence.Configurations.Scheduling;
 
 using Dentara.Domain.Scheduling;
+using Dentara.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -20,7 +21,7 @@ public sealed class WorkScheduleConfiguration : IEntityTypeConfiguration<WorkSch
         builder.Property(w => w.EffectiveUntilUtc).HasColumnType("datetimeoffset(0)");
         builder.Property(w => w.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
         builder.Property(w => w.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
-        builder.Property(w => w.RowVersion).IsRowVersion();
+        builder.Property(w => w.RowVersion).ConfigureRowVersion();
 
         // CHECK constraints per architecture spec
         builder.ToTable(w => w.HasCheckConstraint(
@@ -54,7 +55,7 @@ public sealed class ScheduleExceptionConfiguration : IEntityTypeConfiguration<Sc
         builder.Property(e => e.Reason).HasMaxLength(500);
         builder.Property(e => e.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
         builder.Property(e => e.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
-        builder.Property(e => e.RowVersion).IsRowVersion();
+        builder.Property(e => e.RowVersion).ConfigureRowVersion();
 
         builder.ToTable(e => e.HasCheckConstraint(
             "CK_ScheduleExceptions_TypeValue",
@@ -91,7 +92,7 @@ public sealed class BookingWindowConfiguration : IEntityTypeConfiguration<Bookin
         builder.Property(b => b.ClosedAtUtc).HasColumnType("datetimeoffset(0)");
         builder.Property(b => b.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
         builder.Property(b => b.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
-        builder.Property(b => b.RowVersion).IsRowVersion();
+        builder.Property(b => b.RowVersion).ConfigureRowVersion();
 
         builder.ToTable(b => b.HasCheckConstraint(
             "CK_BookingWindows_StatusValue",
@@ -125,7 +126,7 @@ public sealed class PublishedSessionConfiguration : IEntityTypeConfiguration<Pub
         builder.Property(p => p.PublishedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
         builder.Property(p => p.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
         builder.Property(p => p.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
-        builder.Property(p => p.RowVersion).IsRowVersion();
+        builder.Property(p => p.RowVersion).ConfigureRowVersion();
 
         // UNIQUE on IdempotencyKey — prevents duplicate session generation per ADR-006
         builder.HasIndex(p => p.IdempotencyKey)

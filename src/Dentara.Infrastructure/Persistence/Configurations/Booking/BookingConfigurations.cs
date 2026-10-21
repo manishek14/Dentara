@@ -1,6 +1,7 @@
 namespace Dentara.Infrastructure.Persistence.Configurations.Booking;
 
 using Dentara.Domain.Booking;
+using Dentara.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -43,7 +44,7 @@ public sealed class AppointmentConfiguration : IEntityTypeConfiguration<Appointm
 
         builder.Property(a => a.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
         builder.Property(a => a.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
-        builder.Property(a => a.RowVersion).IsRowVersion();
+        builder.Property(a => a.RowVersion).ConfigureRowVersion();
 
         // CHECK constraints per architecture spec
         builder.ToTable(a => a.HasCheckConstraint(
@@ -65,6 +66,12 @@ public sealed class AppointmentConfiguration : IEntityTypeConfiguration<Appointm
         builder.HasIndex(a => new { a.StatusValue, a.ExpiresAtUtc })
             .HasFilter("StatusValue = 1") // PendingPayment = 1
             .HasDatabaseName("IX_Appointments_PendingPayment_ExpiresAtUtc");
+
+        // Navigation: ResourceAllocations are loaded via Include in services.
+        // Events are added explicitly via DbContext.AppointmentEvents.Add.
+        // We don't configure HasMany/WithOne here because the navigation
+        // collections are IReadOnlyCollection (not ICollection), which EF Core
+        // manages via backing field auto-discovery.
     }
 }
 
@@ -85,7 +92,7 @@ public sealed class ResourceAllocationConfiguration : IEntityTypeConfiguration<R
         builder.Property(r => r.ReleaseReason).HasMaxLength(500);
         builder.Property(r => r.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
         builder.Property(r => r.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
-        builder.Property(r => r.RowVersion).IsRowVersion();
+        builder.Property(r => r.RowVersion).ConfigureRowVersion();
 
         builder.ToTable(r => r.HasCheckConstraint(
             "CK_ResourceAllocations_StartBeforeEnd",
@@ -120,7 +127,7 @@ public sealed class AppointmentEventConfiguration : IEntityTypeConfiguration<App
         builder.Property(e => e.CorrelationId).HasMaxLength(100);
         builder.Property(e => e.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
         builder.Property(e => e.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
-        builder.Property(e => e.RowVersion).IsRowVersion();
+        builder.Property(e => e.RowVersion).ConfigureRowVersion();
 
         builder.ToTable(e => e.HasCheckConstraint(
             "CK_AppointmentEvents_EventTypeValue",

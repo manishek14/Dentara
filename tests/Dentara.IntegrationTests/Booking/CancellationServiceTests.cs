@@ -54,7 +54,7 @@ public sealed class CancellationServiceTests : IntegrationTestBase
                 new(1, 1, false, null)
             });
 
-    [Fact(Skip = "EF Core 10 + SQLite + IsRowVersion UPDATE conflict — see class summary")]
+    [Fact]
     public async Task Cancel_FromPendingPayment_ReleasesAllocationsWithoutRefund()
     {
         // Arrange
@@ -98,7 +98,7 @@ public sealed class CancellationServiceTests : IntegrationTestBase
         });
     }
 
-    [Fact(Skip = "EF Core 10 + SQLite + IsRowVersion conflict — to be fixed when migrating to SQL Server Testcontainers in CI")]
+    [Fact]
     public async Task Cancel_FromConfirmed_CreatesRefundRow()
     {
         // Arrange — seed data and create an appointment in one scope
@@ -132,6 +132,12 @@ public sealed class CancellationServiceTests : IntegrationTestBase
             payment.MarkSucceeded("TX-001", clock);
 
             appt.Confirm(clock, payment.Id, 500_000m);
+
+            // Explicitly add new audit events to the DbContext
+            foreach (var evt in appt.GetUncommittedEvents())
+                await db.AppointmentEvents.AddAsync(evt);
+            appt.MarkEventsAsCommitted();
+
             await db.SaveChangesAsync();
             return payment.Id;
         });
@@ -163,7 +169,7 @@ public sealed class CancellationServiceTests : IntegrationTestBase
         });
     }
 
-    [Fact(Skip = "EF Core 10 + SQLite + IsRowVersion UPDATE conflict — see class summary")]
+    [Fact]
     public async Task Cancel_Twice_SecondCallThrows()
     {
         // Arrange
@@ -197,7 +203,7 @@ public sealed class CancellationServiceTests : IntegrationTestBase
         await act.Should().ThrowAsync<Domain.Exceptions.Booking.InvalidAppointmentTransitionException>();
     }
 
-    [Fact(Skip = "EF Core 10 + SQLite + IsRowVersion UPDATE conflict — see class summary")]
+    [Fact]
     public async Task Cancel_ReleasesCapacity_AllowsSubsequentBooking()
     {
         // Arrange

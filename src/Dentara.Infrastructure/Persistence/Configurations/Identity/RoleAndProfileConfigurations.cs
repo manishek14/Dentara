@@ -1,6 +1,7 @@
 namespace Dentara.Infrastructure.Persistence.Configurations.Identity;
 
 using Dentara.Domain.Identity;
+using Dentara.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -37,7 +38,7 @@ public sealed class UserRoleConfiguration : IEntityTypeConfiguration<UserRole>
         builder.Property(ur => ur.ExpiresAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
         builder.Property(ur => ur.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
         builder.Property(ur => ur.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
-        builder.Property(ur => ur.RowVersion).IsRowVersion();
+        builder.Property(ur => ur.RowVersion).ConfigureRowVersion();
 
         // UNIQUE(UserId, RoleValue) per architecture spec
         builder.HasIndex(ur => new { ur.UserId, ur.RoleValue })
@@ -66,7 +67,7 @@ public sealed class PatientProfileConfiguration : IEntityTypeConfiguration<Patie
         builder.Property(p => p.DateOfBirth).HasColumnType("datetimeoffset(0)");
         builder.Property(p => p.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
         builder.Property(p => p.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
-        builder.Property(p => p.RowVersion).IsRowVersion();
+        builder.Property(p => p.RowVersion).ConfigureRowVersion();
 
         builder.HasIndex(p => p.UserId).HasDatabaseName("IX_PatientProfiles_UserId");
         builder.HasIndex(p => new { p.FirstName, p.LastName }).HasDatabaseName("IX_PatientProfiles_Name");
@@ -88,7 +89,7 @@ public sealed class DentistProfileConfiguration : IEntityTypeConfiguration<Denti
         builder.Property(d => d.IsActive).IsRequired().HasDefaultValue(true);
         builder.Property(d => d.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
         builder.Property(d => d.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
-        builder.Property(d => d.RowVersion).IsRowVersion();
+        builder.Property(d => d.RowVersion).ConfigureRowVersion();
 
         builder.HasIndex(d => d.UserId).HasDatabaseName("IX_DentistProfiles_UserId");
     }

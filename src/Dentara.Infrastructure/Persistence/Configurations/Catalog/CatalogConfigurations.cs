@@ -1,6 +1,7 @@
 namespace Dentara.Infrastructure.Persistence.Configurations.Catalog;
 
 using Dentara.Domain.Catalog;
+using Dentara.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -20,7 +21,7 @@ public sealed class ServiceConfiguration : IEntityTypeConfiguration<Service>
         builder.Property(s => s.Version).IsRequired();
         builder.Property(s => s.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
         builder.Property(s => s.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
-        builder.Property(s => s.RowVersion).IsRowVersion();
+        builder.Property(s => s.RowVersion).ConfigureRowVersion();
 
         // CHECK constraints per architecture spec
         builder.ToTable(s => s.HasCheckConstraint(
@@ -52,7 +53,7 @@ public sealed class DentistServiceConfiguration : IEntityTypeConfiguration<Denti
         builder.Property(d => d.IsActive).IsRequired().HasDefaultValue(true);
         builder.Property(d => d.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
         builder.Property(d => d.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
-        builder.Property(d => d.RowVersion).IsRowVersion();
+        builder.Property(d => d.RowVersion).ConfigureRowVersion();
 
         // UNIQUE(DentistId, ServiceId)
         builder.HasIndex(d => new { d.DentistId, d.ServiceId })
@@ -82,7 +83,7 @@ public sealed class ClinicResourceConfiguration : IEntityTypeConfiguration<Clini
         builder.Property(r => r.OwnerDentistId);
         builder.Property(r => r.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
         builder.Property(r => r.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
-        builder.Property(r => r.RowVersion).IsRowVersion();
+        builder.Property(r => r.RowVersion).ConfigureRowVersion();
 
         // CHECK: TypeValue must be one of 1,2,3,4
         builder.ToTable(r => r.HasCheckConstraint(
@@ -111,7 +112,7 @@ public sealed class ResourceServiceRequirementConfiguration : IEntityTypeConfigu
         builder.Property(r => r.SpecificResourceId);
         builder.Property(r => r.CreatedAtUtc).HasColumnType("datetimeoffset(0)").IsRequired();
         builder.Property(r => r.UpdatedAtUtc).HasColumnType("datetimeoffset(0)");
-        builder.Property(r => r.RowVersion).IsRowVersion();
+        builder.Property(r => r.RowVersion).ConfigureRowVersion();
 
         builder.ToTable(r => r.HasCheckConstraint(
             "CK_ResourceServiceRequirements_TypeValue",

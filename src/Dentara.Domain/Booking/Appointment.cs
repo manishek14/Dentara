@@ -81,7 +81,29 @@ public sealed class Appointment : AggregateRoot
     public IReadOnlyCollection<ResourceAllocation> ResourceAllocations => _resourceAllocations.AsReadOnly();
 
     private readonly List<AppointmentEvent> _events = new();
+
+    /// <summary>
+    /// Audit trail of appointment state transitions. EF Core maps this as a
+    /// navigation collection via the backing field.
+    /// </summary>
     public IReadOnlyCollection<AppointmentEvent> Events => _events.AsReadOnly();
+
+    /// <summary>
+    /// Returns events that were added since the last call to MarkEventsAsCommitted.
+    /// Infrastructure services use this to explicitly Add them to the DbContext.
+    /// </summary>
+    private int _committedEventCount = 0;
+
+    public IReadOnlyList<AppointmentEvent> GetUncommittedEvents()
+    {
+        if (_committedEventCount >= _events.Count) return Array.Empty<AppointmentEvent>();
+        return _events.Skip(_committedEventCount).ToList();
+    }
+
+    public void MarkEventsAsCommitted()
+    {
+        _committedEventCount = _events.Count;
+    }
 
     private Appointment() { } // EF Core
 

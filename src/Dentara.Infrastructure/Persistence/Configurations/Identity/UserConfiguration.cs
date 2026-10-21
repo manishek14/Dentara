@@ -1,6 +1,7 @@
 namespace Dentara.Infrastructure.Persistence.Configurations.Identity;
 
 using Dentara.Domain.Identity;
+using Dentara.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -29,7 +30,7 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.PhoneVerifiedAtUtc).HasColumnType("datetimeoffset(0)");
 
         // RowVersion for optimistic concurrency
-        builder.Property(u => u.RowVersion).IsRowVersion();
+        builder.Property(u => u.RowVersion).ConfigureRowVersion();
 
         builder.HasMany(u => u.Roles)
             .WithOne()

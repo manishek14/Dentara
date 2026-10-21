@@ -61,14 +61,33 @@ public sealed class AppointmentExpiryWorker : WorkerBase
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<AppointmentExpiryWorker>>();
 
         // Find expired PendingPayment appointments. Take a batch of 50 at a time.
-        // Use a simpler two-step approach: first load IDs, then load entities
-        // for tracking. This avoids DateTimeOffset translation issues in SQLite.
+        // Use ADO.NET directly because EF Core SQLite has trouble translating
+        // DateTimeOffset comparisons in both LINQ and FromSqlInterpolated.
         var nowUtc = _clock.UtcNow;
 
-        // Use FromSqlInterpolated for proper parameter handling
+        // Get IDs via ADO.NET
+        var connection = db.Database.GetDbConnection();
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT Id FROM Appointments WHERE StatusValue = 1 AND ExpiresAtUtc <= $now ORDER BY ExpiresAtUtc LIMIT 50";
+        var p = cmd.CreateParameter();
+        p.ParameterName = "$now";
+        p.Value = nowUtc.ToString("O"); // ISO 8601 round-trip format
+        cmd.Parameters.Add(p);
+
+        var expiredIds = new List<Guid>();
+        await using var reader = await cmd.ExecuteReaderAsync(stoppingToken);
+        while (await reader.ReadAsync(stoppingToken))
+            expiredIds.Add(reader.GetGuid(0));
+        await reader.CloseAsync();
+
+        if (expiredIds.Count == 0)
+            return;
+
+        // Load entities via EF Core (tracked) using the IDs we found.
+        // Note: no OrderBy — SQLite can't order by DateTimeOffset in LINQ.
+        // The IDs were already ordered by ExpiresAtUtc in the ADO.NET query.
         var expiredAppts = await db.Appointments
-            .FromSqlInterpolated(
-                $"SELECT * FROM Appointments WHERE StatusValue = 1 AND ExpiresAtUtc <= {nowUtc} ORDER BY ExpiresAtUtc LIMIT 50")
+            .Where(a => expiredIds.Contains(a.Id))
             .ToListAsync(stoppingToken);
 
         if (expiredAppts.Count == 0)
@@ -99,11 +118,13 @@ public sealed class AppointmentExpiryWorker : WorkerBase
         ILogger logger,
         CancellationToken ct)
     {
-        // Look up the latest PaymentAttempt for this appointment
-        var latestPayment = await db.PaymentAttempts
+        // Look up the latest PaymentAttempt for this appointment.
+        // Note: can't use OrderBy(CreatedAtUtc) in SQLite — DateTimeOffset
+        // ordering is not supported. Load all and sort on client.
+        var payments = await db.PaymentAttempts
             .Where(p => p.AppointmentId == appointment.Id)
-            .OrderByDescending(p => p.CreatedAtUtc)
-            .FirstOrDefaultAsync(ct);
+            .ToListAsync(ct);
+        var latestPayment = payments.OrderByDescending(p => p.CreatedAtUtc).FirstOrDefault();
 
         if (latestPayment == null)
         {
@@ -194,6 +215,13 @@ public sealed class AppointmentExpiryWorker : WorkerBase
         {
             appointment.Expire(_clock, paymentWasVerifiedAbsent);
 
+            // Explicitly add new audit events to the DbContext.
+            foreach (var evt in appointment.GetUncommittedEvents())
+            {
+                await db.AppointmentEvents.AddAsync(evt, ct);
+            }
+            appointment.MarkEventsAsCommitted();
+
             // Release all active resource allocations
             var allocations = await db.ResourceAllocations
                 .Where(ra => ra.AppointmentId == appointment.Id && ra.StatusValue == AllocationStatus.Active.Value)
@@ -222,6 +250,13 @@ public sealed class AppointmentExpiryWorker : WorkerBase
         try
         {
             appointment.Confirm(_clock, payment.Id, payment.Amount);
+
+            // Explicitly add new audit events to the DbContext.
+            foreach (var evt in appointment.GetUncommittedEvents())
+            {
+                await db.AppointmentEvents.AddAsync(evt, ct);
+            }
+            appointment.MarkEventsAsCommitted();
 
             await db.SaveChangesAsync(ct);
 

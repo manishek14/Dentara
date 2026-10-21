@@ -48,7 +48,6 @@ public sealed class SqlCancellationService : ICancellationService
             {
                 var appointment = await _dbContext.Appointments
                     .Include(a => a.ResourceAllocations)
-                    .Include(a => a.Events)
                     .FirstOrDefaultAsync(a => a.Id == appointmentId, cancellationToken);
 
                 if (appointment == null)
@@ -60,6 +59,14 @@ public sealed class SqlCancellationService : ICancellationService
 
                 // Transition the appointment to Cancelled (raises domain events)
                 appointment.Cancel(_clock, cancelledBy, reason, correlationId);
+
+                // Explicitly add new audit events to the DbContext. EF Core cannot
+                // auto-track them via the IReadOnlyCollection navigation property.
+                foreach (var evt in appointment.GetUncommittedEvents())
+                {
+                    await _dbContext.AppointmentEvents.AddAsync(evt, cancellationToken);
+                }
+                appointment.MarkEventsAsCommitted();
 
                 // Release all active ResourceAllocations
                 foreach (var allocation in appointment.ResourceAllocations)
@@ -75,7 +82,7 @@ public sealed class SqlCancellationService : ICancellationService
                     var paymentAttempt = await _dbContext.PaymentAttempts
                         .FirstOrDefaultAsync(p =>
                             p.AppointmentId == appointmentId &&
-                            p.Status == PaymentStatus.Succeeded,
+                            p.StatusValue == PaymentStatus.Succeeded.Value,
                             cancellationToken);
 
                     if (paymentAttempt != null)
