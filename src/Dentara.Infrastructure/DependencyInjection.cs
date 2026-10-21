@@ -74,6 +74,8 @@ public static class DependencyInjection
         services.AddHostedService<AppointmentExpiryWorker>();
         services.AddHostedService<BookingWindowPublicationWorker>();
         services.AddHostedService<IdempotencyCleanupWorker>();
+        services.AddHostedService<ReminderSchedulingWorker>();
+        services.AddHostedService<NotificationDispatcherWorker>();
 
         return services;
     }

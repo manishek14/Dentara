@@ -3,6 +3,7 @@ namespace Dentara.Infrastructure.Persistence;
 using Dentara.Domain.Booking;
 using Dentara.Domain.Catalog;
 using Dentara.Domain.Identity;
+using Dentara.Domain.Notifications;
 using Dentara.Domain.Payments;
 using Dentara.Domain.Scheduling;
 using Microsoft.EntityFrameworkCore;
@@ -50,6 +51,9 @@ public class DentaraDbContext : DbContext
     public DbSet<Refund> Refunds => Set<Refund>();
     public DbSet<PaymentWebhookEvent> PaymentWebhookEvents => Set<PaymentWebhookEvent>();
     public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
+
+    // Notifications
+    public DbSet<Notification> Notifications => Set<Notification>();
 
     /// <summary>
     /// True when the provider is SQLite (test mode). T-SQL CHECK constraints
