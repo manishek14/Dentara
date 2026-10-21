@@ -20,15 +20,18 @@ public sealed class SqlCancellationService : ICancellationService
     private readonly DentaraDbContext _dbContext;
     private readonly IClock _clock;
     private readonly ILogger<SqlCancellationService> _logger;
+    private readonly Waitlist.WaitlistProcessor? _waitlistProcessor;
 
     public SqlCancellationService(
         DentaraDbContext dbContext,
         IClock clock,
-        ILogger<SqlCancellationService> logger)
+        ILogger<SqlCancellationService> logger,
+        Waitlist.WaitlistProcessor? waitlistProcessor = null)
     {
         _dbContext = dbContext;
         _clock = clock;
         _logger = logger;
+        _waitlistProcessor = waitlistProcessor;
     }
 
     public async Task<Appointment> CancelAsync(
@@ -114,6 +117,29 @@ public sealed class SqlCancellationService : ICancellationService
                 _logger.LogInformation(
                     "Cancelled appointment {AppointmentId} by {CancelledBy}; refundAmount={RefundAmount}",
                     appointmentId, cancelledBy, refundAmount);
+
+                // After commit, process the waitlist for the freed slot.
+                // This is OUTSIDE the transaction — if the waitlist processing
+                // fails, the cancellation is still committed.
+                if (_waitlistProcessor != null)
+                {
+                    try
+                    {
+                        await _waitlistProcessor.ProcessFreedSlotAsync(
+                            appointment.DentistId,
+                            appointment.ServiceId,
+                            appointment.StartAtUtc,
+                            appointment.EndAtUtc,
+                            cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex,
+                            "Waitlist processing failed for freed slot {StartAt} (dentist {DentistId}); " +
+                            "cancellation is still committed",
+                            appointment.StartAtUtc, appointment.DentistId);
+                    }
+                }
 
                 return appointment;
             }

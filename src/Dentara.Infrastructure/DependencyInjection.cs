@@ -16,6 +16,7 @@ using Dentara.Infrastructure.Clock;
 using Dentara.Infrastructure.Payments;
 using Dentara.Infrastructure.Persistence;
 using Dentara.Infrastructure.Scheduling;
+using Dentara.Infrastructure.Waitlist;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -49,6 +50,7 @@ public static class DependencyInjection
         // Domain services
         services.AddScoped<IBookingTransactionService, SqlBookingTransactionService>();
         services.AddScoped<ICancellationService, SqlCancellationService>();
+        services.AddScoped<WaitlistProcessor>();
 
         // Gateway adapters (sandbox for dev; swap to real adapters in production)
         services.AddScoped<IPaymentGateway, Gateways.Payments.SandboxPaymentGateway>();
@@ -76,6 +78,7 @@ public static class DependencyInjection
         services.AddHostedService<IdempotencyCleanupWorker>();
         services.AddHostedService<ReminderSchedulingWorker>();
         services.AddHostedService<NotificationDispatcherWorker>();
+        services.AddHostedService<WaitlistOfferExpiryWorker>();
 
         return services;
     }

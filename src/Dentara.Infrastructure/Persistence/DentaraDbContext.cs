@@ -6,6 +6,7 @@ using Dentara.Domain.Identity;
 using Dentara.Domain.Notifications;
 using Dentara.Domain.Payments;
 using Dentara.Domain.Scheduling;
+using Dentara.Domain.Waitlist;
 using Microsoft.EntityFrameworkCore;
 
 /// <summary>
@@ -54,6 +55,9 @@ public class DentaraDbContext : DbContext
 
     // Notifications
     public DbSet<Notification> Notifications => Set<Notification>();
+
+    // Waitlist
+    public DbSet<WaitlistEntry> WaitlistEntries => Set<WaitlistEntry>();
 
     /// <summary>
     /// True when the provider is SQLite (test mode). T-SQL CHECK constraints
