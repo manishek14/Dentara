@@ -11,6 +11,7 @@ using Dentara.Domain.Services.Booking;
 using Dentara.Domain.Services.Payments;
 using Dentara.Domain.Services.Scheduling;
 using Dentara.Infrastructure.BackgroundJobs;
+using Dentara.Infrastructure.Audit;
 using Dentara.Infrastructure.Booking;
 using Dentara.Infrastructure.Clock;
 using Dentara.Infrastructure.Payments;
@@ -69,6 +70,9 @@ public static class DependencyInjection
 
         // Scheduling publication service (used by the PublicationWorker)
         services.AddScoped<IPublicationService, SqlPublicationService>();
+
+        // Audit service
+        services.AddScoped<IAuditService, SqlAuditService>();
 
         // Background workers — registered as hosted services (singletons).
         // Each worker creates its own DI scope per iteration so scoped services

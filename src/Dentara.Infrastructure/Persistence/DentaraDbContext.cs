@@ -1,5 +1,6 @@
 namespace Dentara.Infrastructure.Persistence;
 
+using Dentara.Domain.Audit;
 using Dentara.Domain.Booking;
 using Dentara.Domain.Catalog;
 using Dentara.Domain.Identity;
@@ -58,6 +59,9 @@ public class DentaraDbContext : DbContext
 
     // Waitlist
     public DbSet<WaitlistEntry> WaitlistEntries => Set<WaitlistEntry>();
+
+    // Audit
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     /// <summary>
     /// True when the provider is SQLite (test mode). T-SQL CHECK constraints
