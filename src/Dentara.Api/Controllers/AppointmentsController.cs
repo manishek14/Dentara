@@ -1,10 +1,13 @@
 namespace Dentara.Api.Controllers;
 
+using Dentara.Api.Authorization;
 using Dentara.Api.Contracts.Booking;
 using Dentara.Api.Contracts.Common;
 using Dentara.Api.Extensions;
 using Dentara.Api.Middleware;
 using Dentara.Application.Booking.Commands;
+using Dentara.Application.Common.Authorization;
+using Dentara.Domain.Identity;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -12,8 +15,8 @@ using Microsoft.Extensions.Logging;
 using System.Security.Claims;
 
 /// <summary>
-/// Appointment endpoints: create, cancel, confirm, expire.
-/// All endpoints require JWT authentication.
+/// Appointment endpoints: create, cancel.
+/// All endpoints require JWT authentication + specific permissions.
 /// </summary>
 [ApiController]
 [Route("api/appointments")]
@@ -33,10 +36,13 @@ public sealed class AppointmentsController : ControllerBase
     /// Creates a new appointment. The booking transaction runs with UPDLOCK+
     /// HOLDLOCK per ADR-003 — if the slot is taken, returns 409 Conflict.
     /// Idempotent: send X-Idempotency-Key header on retries.
+    /// Permission: appointment.create (Patient, Receptionist, Admin).
     /// </summary>
     [HttpPost]
+    [HasPermission(Permissions.AppointmentCreate)]
     [ProducesResponseType(typeof(CreateAppointmentResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Create(
         [FromBody] CreateAppointmentRequest request,
@@ -81,10 +87,14 @@ public sealed class AppointmentsController : ControllerBase
     /// <summary>
     /// Cancels an appointment. Releases capacity atomically and creates a
     /// Refund row if the appointment was Confirmed. Idempotent.
+    /// Permission: appointment.cancel (patient cancels own) OR
+    ///             appointment.cancel_any (staff cancels any).
     /// </summary>
     [HttpPost("{id:guid}/cancel")]
+    [HasPermission(Permissions.AppointmentCancel)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Cancel(
         [FromRoute] Guid id,
@@ -93,6 +103,14 @@ public sealed class AppointmentsController : ControllerBase
     {
         var userId = GetCurrentUserId();
         var cancelledBy = $"Patient:{userId}";
+
+        // Staff (Receptionist, Admin) can cancel any appointment.
+        // The CancelAppointmentCommand handler checks ownership for patients.
+        var roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
+        if (roles.Contains(nameof(Role.Admin)) || roles.Contains(nameof(Role.Receptionist)))
+        {
+            cancelledBy = $"Staff:{userId}";
+        }
 
         var command = new CancelAppointmentCommand(
             id,

@@ -12,6 +12,13 @@ using Microsoft.Extensions.Logging;
 
 /// <summary>
 /// Authentication endpoints: OTP request + verify, JWT issuance.
+///
+/// These endpoints are intentionally ANONYMOUS — they are the entry point
+/// for obtaining a JWT token. Permission checks cannot be applied here
+/// because the caller doesn't have a token yet.
+///
+/// Rate limiting is enforced via IdempotencyBehavior (scope=sms_otp,
+/// TTL=60s) per ADR-006.
 /// </summary>
 [ApiController]
 [Route("api/identity")]

@@ -1,9 +1,11 @@
 namespace Dentara.Api.Controllers;
 
+using Dentara.Api.Authorization;
 using Dentara.Api.Contracts.Common;
 using Dentara.Api.Contracts.Payments;
 using Dentara.Api.Extensions;
 using Dentara.Api.Middleware;
+using Dentara.Application.Common.Authorization;
 using Dentara.Application.Payments.Commands;
 using Dentara.Domain.Payments;
 using MediatR;
@@ -32,11 +34,14 @@ public sealed class PaymentsController : ControllerBase
     /// Initiates a payment for an appointment. Returns the gateway redirect URL.
     /// The patient navigates to the URL, completes payment at the gateway, and
     /// the gateway calls back to the webhook endpoint.
+    /// Permission: payment.initiate (Patient, Admin).
     /// </summary>
     [HttpPost("initiate")]
     [Authorize]
+    [HasPermission(Permissions.PaymentInitiate)]
     [ProducesResponseType(typeof(InitiatePaymentResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> Initiate(
         [FromBody] InitiatePaymentRequest request,
         CancellationToken cancellationToken)
@@ -66,6 +71,8 @@ public sealed class PaymentsController : ControllerBase
     /// called BY THE GATEWAY, not by the patient. Idempotent: re-processing
     /// the same ProviderEventId returns the original result without
     /// double-charging or double-confirming.
+    /// No permission required — the gateway authenticates via signature
+    /// verification in the WebhookProcessor.
     /// </summary>
     [HttpPost("webhooks")]
     [AllowAnonymous]
@@ -109,11 +116,14 @@ public sealed class PaymentsController : ControllerBase
     /// <summary>
     /// Requests a refund for a confirmed-then-cancelled appointment. The
     /// refund amount is computed from the appointment's snapshot fields.
+    /// Permission: refund.request (Receptionist, Admin).
     /// </summary>
     [HttpPost("refunds")]
-    [Authorize(Roles = "Admin,Receptionist")]
+    [Authorize]
+    [HasPermission(Permissions.RefundRequest)]
     [ProducesResponseType(typeof(RequestRefundResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> RequestRefund(
         [FromBody] RequestRefundRequest request,
         CancellationToken cancellationToken)
