@@ -6,21 +6,28 @@ using Dentara.Application.Common.Interfaces;
 using Dentara.Application.Common.Results;
 using Dentara.Domain.Common;
 using MediatR;
+using System.Text.Json;
 
 public sealed class JoinWaitlistCommandHandler
     : IRequestHandler<JoinWaitlistCommand, Result<WaitlistJoinedResult>>
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IRepository<Domain.Waitlist.WaitlistEntry> _repository;
+    private readonly IAuditService _auditService;
+    private readonly ICurrentUserContext _currentUser;
     private readonly IClock _clock;
 
     public JoinWaitlistCommandHandler(
         IUnitOfWork unitOfWork,
         IRepository<Domain.Waitlist.WaitlistEntry> repository,
+        IAuditService auditService,
+        ICurrentUserContext currentUser,
         IClock clock)
     {
         _unitOfWork = unitOfWork;
         _repository = repository;
+        _auditService = auditService;
+        _currentUser = currentUser;
         _clock = clock;
     }
 
@@ -39,6 +46,27 @@ public sealed class JoinWaitlistCommandHandler
 
             await _repository.AddAsync(entry, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            await _auditService.LogAsync(new AuditEntry(
+                EntityType: "WaitlistEntry",
+                EntityId: entry.Id,
+                Action: "Join",
+                PerformedBy: _currentUser.UserId.HasValue
+                    ? $"User:{_currentUser.UserId}"
+                    : "Anonymous",
+                OccurredAtUtc: _clock.UtcNow,
+                Description: $"Patient joined waitlist for dentist {request.DentistId}, service {request.ServiceId}",
+                PerformedByUserId: _currentUser.UserId,
+                NewValueJson: JsonSerializer.Serialize(new
+                {
+                    patientId = entry.PatientId,
+                    dentistId = entry.DentistId,
+                    serviceId = entry.ServiceId,
+                    earliestStartUtc = entry.EarliestStartUtc,
+                    latestStartUtc = entry.LatestStartUtc,
+                    status = entry.Status.Name
+                }),
+                CorrelationId: request.CorrelationId), cancellationToken);
 
             return Result<WaitlistJoinedResult>.Success(new WaitlistJoinedResult(entry.Id));
         }
@@ -65,15 +93,21 @@ public sealed class CancelWaitlistCommandHandler
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IRepository<Domain.Waitlist.WaitlistEntry> _repository;
+    private readonly IAuditService _auditService;
+    private readonly ICurrentUserContext _currentUser;
     private readonly IClock _clock;
 
     public CancelWaitlistCommandHandler(
         IUnitOfWork unitOfWork,
         IRepository<Domain.Waitlist.WaitlistEntry> repository,
+        IAuditService auditService,
+        ICurrentUserContext currentUser,
         IClock clock)
     {
         _unitOfWork = unitOfWork;
         _repository = repository;
+        _auditService = auditService;
+        _currentUser = currentUser;
         _clock = clock;
     }
 
@@ -91,6 +125,23 @@ public sealed class CancelWaitlistCommandHandler
             entry.Cancel(_clock);
             _repository.Update(entry);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            await _auditService.LogAsync(new AuditEntry(
+                EntityType: "WaitlistEntry",
+                EntityId: entry.Id,
+                Action: "Cancel",
+                PerformedBy: _currentUser.UserId.HasValue
+                    ? $"User:{_currentUser.UserId}"
+                    : "Anonymous",
+                OccurredAtUtc: _clock.UtcNow,
+                Description: "Patient cancelled waitlist entry",
+                PerformedByUserId: _currentUser.UserId,
+                NewValueJson: JsonSerializer.Serialize(new
+                {
+                    status = entry.Status.Name,
+                    cancelledAtUtc = entry.CancelledAtUtc
+                }),
+                CorrelationId: request.CorrelationId), cancellationToken);
 
             return Result.Success();
         }

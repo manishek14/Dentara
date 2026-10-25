@@ -43,7 +43,7 @@ public class ConfirmAppointmentCommandHandlerTests
         var uowMock = new Mock<IUnitOfWork>();
         var dispatcherMock = new Mock<IDomainEventDispatcher>();
         var handler = new ConfirmAppointmentCommandHandler(
-            uowMock.Object, repoMock.Object, dispatcherMock.Object, _clock);
+            uowMock.Object, repoMock.Object, dispatcherMock.Object, new Mock<IAuditService>().Object, new Mock<ICurrentUserContext>().Object, _clock);
 
         // Act
         var result = await handler.Handle(
@@ -72,7 +72,7 @@ public class ConfirmAppointmentCommandHandlerTests
         var uowMock = new Mock<IUnitOfWork>();
         var dispatcherMock = new Mock<IDomainEventDispatcher>();
         var handler = new ConfirmAppointmentCommandHandler(
-            uowMock.Object, repoMock.Object, dispatcherMock.Object, _clock);
+            uowMock.Object, repoMock.Object, dispatcherMock.Object, new Mock<IAuditService>().Object, new Mock<ICurrentUserContext>().Object, _clock);
 
         // Act
         var result = await handler.Handle(
@@ -96,7 +96,7 @@ public class ConfirmAppointmentCommandHandlerTests
         var uowMock = new Mock<IUnitOfWork>();
         var dispatcherMock = new Mock<IDomainEventDispatcher>();
         var handler = new ConfirmAppointmentCommandHandler(
-            uowMock.Object, repoMock.Object, dispatcherMock.Object, _clock);
+            uowMock.Object, repoMock.Object, dispatcherMock.Object, new Mock<IAuditService>().Object, new Mock<ICurrentUserContext>().Object, _clock);
 
         // Act
         var result = await handler.Handle(
@@ -121,7 +121,7 @@ public class ConfirmAppointmentCommandHandlerTests
         var uowMock = new Mock<IUnitOfWork>();
         var dispatcherMock = new Mock<IDomainEventDispatcher>();
         var handler = new ConfirmAppointmentCommandHandler(
-            uowMock.Object, repoMock.Object, dispatcherMock.Object, _clock);
+            uowMock.Object, repoMock.Object, dispatcherMock.Object, new Mock<IAuditService>().Object, new Mock<ICurrentUserContext>().Object, _clock);
 
         // Act
         var result = await handler.Handle(
