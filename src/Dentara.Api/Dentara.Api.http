@@ -168,4 +168,55 @@ Authorization: Bearer {{token}}
 GET {{devHost}}/api/audit/logs?performedByUserId=00000000-0000-0000-0000-000000000001
 Authorization: Bearer {{token}}
 
+### ──────────── WAITLIST ────────────
+
+### Join the waitlist (Patient)
+POST {{devHost}}/api/waitlist
+Authorization: Bearer {{token}}
+Content-Type: application/json
+X-Idempotency-Key: {{$guid}}
+X-Correlation-Id: {{correlationId}}
+
+{
+  "dentistId": "00000000-0000-0000-0000-000000000001",
+  "serviceId": "00000000-0000-0000-0000-000000000002",
+  "earliestStartUtc": "2026-12-01T08:00:00Z",
+  "latestStartUtc": "2026-12-01T18:00:00Z",
+  "notes": "Prefer mornings if possible"
+}
+
+### Cancel a waitlist entry (patient cancels own)
+POST {{devHost}}/api/waitlist/00000000-0000-0000-0000-000000000010/cancel
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "patientId": null
+}
+
+### Cancel a waitlist entry (staff cancels on behalf)
+POST {{devHost}}/api/waitlist/00000000-0000-0000-0000-000000000010/cancel
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "patientId": "00000000-0000-0000-0000-000000000002"
+}
+
+### List my waitlist entries (Patient sees own)
+GET {{devHost}}/api/waitlist
+Authorization: Bearer {{token}}
+
+### List all waitlist entries (Staff with waitlist.view_all)
+GET {{devHost}}/api/waitlist?status=Waiting&pageNumber=1&pageSize=20
+Authorization: Bearer {{token}}
+
+### List waitlist entries for a specific dentist
+GET {{devHost}}/api/waitlist?dentistId=00000000-0000-0000-0000-000000000001
+Authorization: Bearer {{token}}
+
+### Get a specific waitlist entry by ID
+GET {{devHost}}/api/waitlist/00000000-0000-0000-0000-000000000010
+Authorization: Bearer {{token}}
+
 ###
