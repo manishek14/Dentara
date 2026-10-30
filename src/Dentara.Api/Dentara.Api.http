@@ -136,4 +136,36 @@ POST {{devHost}}/api/scheduling/booking-windows/00000000-0000-0000-0000-00000000
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
+### ──────────── DASHBOARD (Admin/Receptionist/Dentist) ────────────
+
+### Get dashboard statistics (default: last 30 days)
+GET {{devHost}}/api/dashboard/stats
+Authorization: Bearer {{token}}
+
+### Get dashboard statistics for a specific date range
+GET {{devHost}}/api/dashboard/stats?fromUtc=2026-11-01T00:00:00Z&toUtc=2026-11-30T23:59:59Z
+Authorization: Bearer {{token}}
+
+### ──────────── AUDIT LOG (Admin only) ────────────
+
+### Get audit log entries (default: last 30 days, page 1)
+GET {{devHost}}/api/audit/logs
+Authorization: Bearer {{token}}
+
+### Get audit log with filters
+GET {{devHost}}/api/audit/logs?entityType=Appointment&action=Cancel&pageNumber=1&pageSize=20
+Authorization: Bearer {{token}}
+
+### Get audit log by correlation id (trace a request end-to-end)
+GET {{devHost}}/api/audit/logs?correlationId=test-correlation-123
+Authorization: Bearer {{token}}
+
+### Get full history for a specific entity (e.g. all changes to one appointment)
+GET {{devHost}}/api/audit/entities/Appointment/00000000-0000-0000-0000-000000000003
+Authorization: Bearer {{token}}
+
+### Get audit log filtered by user
+GET {{devHost}}/api/audit/logs?performedByUserId=00000000-0000-0000-0000-000000000001
+Authorization: Bearer {{token}}
+
 ###
