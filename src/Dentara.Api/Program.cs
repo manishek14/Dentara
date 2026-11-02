@@ -55,3 +55,6 @@ app.MapGet("/health", () => Results.Ok(new
 })).AllowAnonymous().WithTags("Health");
 
 app.Run();
+
+// Expose Program class for WebApplicationFactory
+public partial class Program { }

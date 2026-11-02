@@ -24,4 +24,14 @@ public static class DependencyInjection
 
         return services;
     }
+
+    /// <summary>
+    /// Registers MediatR handlers from an additional assembly (e.g. Infrastructure).
+    /// Call this AFTER AddApplication from the Infrastructure layer.
+    /// </summary>
+    public static IServiceCollection AddMediatRFromAssembly(this IServiceCollection services, Assembly assembly)
+    {
+        services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(assembly));
+        return services;
+    }
 }

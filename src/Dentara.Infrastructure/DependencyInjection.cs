@@ -1,5 +1,6 @@
 namespace Dentara.Infrastructure;
 
+using Dentara.Application;
 using Dentara.Application.Common.Interfaces;
 using Dentara.Domain.Common;
 using Dentara.Domain.Identity;
@@ -30,6 +31,10 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
+        // Register MediatR handlers from Infrastructure assembly
+        // (CatalogQueryHandlers, DashboardQueryHandler, AuditQueryHandler, etc.)
+        services.AddMediatRFromAssembly(typeof(DentaraDbContext).Assembly);
+
         // Persistence (DbContext + repositories + UoW + dispatcher)
         services.AddPersistence(configuration);
 
