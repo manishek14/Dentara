@@ -1,16 +1,25 @@
 # Dentara
 
-> سامانه رزرو آنلاین دندان‌پزشکی — نسخه ۰٫۱
+> سامانه رزرو آنلاین دندان‌پزشکی — نسخه ۰٫۲
 
-Dentara یک پلتفرم رزرو نوبت آنلاین برای کلینیک‌های دندان‌پزشکی است که با تمرکز بر **صحت تراکنشی رزرو در شرایط هم‌زمانی** طراحی شده است.
+Dentara یک پلتفرم رزرو نوبت آنلاین برای کلینیک‌های دندان‌پزشکی است که با تمرکز بر **صحت تراکنشی رزرو در شرایط هم‌زمانی** طراحی شده است. SQL Server مرجع قطعی ظرفیت است — نه فرانت‌اند، نه Redis، نه تایمر مرورگر.
 
 ---
 
 ## ✅ وضعیت پروژه
 
-**لایه‌های کامل:** Domain · Application · Infrastructure · API · Background Workers · Integration Tests
-
-**۲۵ کامیت، ۳۲۲ تست موفق** (۳۱۰ unit + ۱۲ integration) + ۸ تست skipped با دلیل مستند.
+| متریک | مقدار |
+|-------|-------|
+| کامیت‌ها | ۳۶ |
+| فایل‌های C# | ۲۶۹ |
+| Unit tests | ۳۱۰ ✅ |
+| Integration tests | ۲۰ ✅ |
+| Skipped tests | ۰ |
+| API Controllers | ۹ |
+| API Endpoints | ۳۵+ |
+| Background Workers | ۶ |
+| ADRs | ۷ |
+| ماژول‌های Domain | ۷ (Identity, Catalog, Scheduling, Booking, Payments, Notifications, Waitlist, Audit) |
 
 🔗 ریپو: https://github.com/manishek14/Dentara
 
@@ -23,9 +32,10 @@ Dentara یک پلتفرم رزرو نوبت آنلاین برای کلینیک�
 | Backend | ASP.NET Core Web API (C# 13 / .NET 10) |
 | ORM | Entity Framework Core 10 |
 | Database | Microsoft SQL Server (تولید) · SQLite (تست) |
-| Architecture | Modular Monolith (۵ ماژول) |
-| CQRS | MediatR با Pipeline Behaviors |
+| Architecture | Modular Monolith |
+| CQRS | MediatR با Pipeline Behaviors (Logging, Validation, Idempotency) |
 | Auth | JWT Bearer + Refresh Token |
+| Background Jobs | IHostedService (WorkerBase) |
 | Testing | xUnit + FluentAssertions + Moq + SQLite in-memory |
 
 ---
@@ -35,138 +45,230 @@ Dentara یک پلتفرم رزرو نوبت آنلاین برای کلینیک�
 ```
 Dentara.sln
 ├── src/
-│   ├── Dentara.Api/              # endpointها، احراز هویت، middleware
-│   ├── Dentara.Application/      # جریان‌های رزرو، لغو، پرداخت، انتشار
-│   ├── Dentara.Domain/           # مفاهیم اصلی، وضعیت‌ها، قواعد کسب‌وکار
-│   └── Dentara.Infrastructure/   # EF Core، SQL Server، workers، gateways
+│   ├── Dentara.Api/              # ۹ Controller، middleware، JWT auth، RBAC
+│   ├── Dentara.Application/      # CQRS commands/queries/handlers، pipeline behaviors
+│   ├── Dentara.Domain/           # ۷ ماژول، entities، state machines، domain events
+│   └── Dentara.Infrastructure/   # EF Core، SQL Server، ۶ workers، gateways
 └── tests/
-    ├── Dentara.UnitTests/        # تست واحد قواعد دامنه (۳۱۰ تست)
-    └── Dentara.IntegrationTests/ # تست یکپارچگی روی SQLite (۱۲ + ۸ skipped)
+    ├── Dentara.UnitTests/        # ۳۱۰ تست واحد
+    └── Dentara.IntegrationTests/ # ۲۰ تست یکپارچگی (SQLite)
 ```
 
-### ماژول‌های داخلی (در لایه‌های Domain/Application/Infrastructure)
+### ماژول‌های داخلی
 
-1. **Identity** — Users, Roles, PatientProfiles, DentistProfiles, OTP
-2. **Catalog** — Services, ClinicResources, ResourceServiceRequirements
-3. **Scheduling** — WorkSchedules, ScheduleExceptions, BookingWindows, PublishedSessions
-4. **Booking** — Appointments, ResourceAllocations, AppointmentEvents
-5. **Payments** — PaymentAttempts, Refunds, PaymentWebhookEvents, IdempotencyRecords
+| ماژول | Entities | مسئولیت |
+|-------|----------|---------|
+| **Identity** | User, Role, UserRole, PatientProfile, DentistProfile | احراز هویت OTP، JWT، مدیریت کاربران |
+| **Catalog** | Service, DentistService, ClinicResource, ResourceServiceRequirement | خدمات، منابع، قیمت‌گذاری |
+| **Scheduling** | WorkSchedule, ScheduleException, BookingWindow, PublishedSession | برنامه کاری، انتشار نوبت |
+| **Booking** | Appointment, ResourceAllocation, AppointmentEvent | رزرو، تخصیص منابع، audit trail |
+| **Payments** | PaymentAttempt, Refund, PaymentWebhookEvent, IdempotencyRecord | پرداخت، بازپرداخت، webhook |
+| **Notifications** | Notification | یادآوری SMS، اطلاع‌رسانی |
+| **Waitlist** | WaitlistEntry | لیست انتظار، پیشنهاد خودکار |
+| **Audit** | AuditLog | تاریخچه تغییرات (INSERT-only) |
 
 ---
 
 ## اصول معماری (ADRs)
 
-- **ADR-001** — SQL Server + EF Core به‌عنوان مرجع داده
-- **ADR-002** — Modular Monolith (بدون Microservices در نسخه اول)
-- **ADR-003** — **SQL Server مرجع قطعی ظرفیت است**؛ نه فرانت‌اند، نه Redis، نه تایمر مرورگر
-- **ADR-004** — وضعیت رزرو و وضعیت پرداخت دو چرخه مستقل‌اند
-- **ADR-005** — UTC برای ذخیره‌سازی، منطقهٔ زمانی کلینیک در تنظیمات، تقویم شمسی صرفاً نمایش
-- **ADR-006** — همهٔ عملیات خارجی (callback، لغو، انقضا، بازپرداخت) idempotent
-- **ADR-007** — مبلغ، مدت و سیاست لغو هنگام رزرو به‌صورت snapshot ذخیره می‌شوند
+| ADR | عنوان | وضعیت |
+|-----|-------|-------|
+| [ADR-001](docs/adr/ADR-001-sql-server-and-ef-core.md) | SQL Server + EF Core | Accepted |
+| [ADR-002](docs/adr/ADR-002-modular-monolith.md) | Modular Monolith | Accepted |
+| [ADR-003](docs/adr/ADR-003-database-first-capacity-truth.md) | **SQL Server مرجع قطعی ظرفیت** | Accepted |
+| [ADR-004](docs/adr/ADR-004-separate-booking-and-payment-states.md) | جدایی چرخه رزرو و پرداخت | Accepted |
+| [ADR-005](docs/adr/ADR-005-utc-storage-and-persian-display.md) | UTC + تقویم شمسی | Accepted |
+| [ADR-006](docs/adr/ADR-006-idempotent-external-operations.md) | Idempotency عملیات خارجی | Accepted |
+| [ADR-007](docs/adr/ADR-007-snapshot-commercial-terms.md) | Snapshot شرایط تجاری | Accepted |
 
 ---
 
-## 🎯 نکات کلیدی پیاده‌سازی
+## 🎯 قابلیت‌های کلیدی
 
 ### جلوگیری از Overbooking (ADR-003)
+تراکنش اتمیک + `UPDLOCK + HOLDLOCK` در SQL Server. **تأیید شده با تست رقابتی**: ۱۰۰ درخواست هم‌زمان → دقیقاً ۱۰ موفق، ۹۰ ناموفق.
 
-هستهٔ طراحی: تراکنش اتمیک + قفل‌گذاری پایدار در SQL Server. پیاده‌سازی در `SqlBookingTransactionService`:
+### یادآوری خودکار نوبت
+`ReminderSchedulingWorker` (۵ دقیقه) + `NotificationDispatcherWorker` (۳۰ ثانیه) — یادآوری SMS ۲۴ ساعت قبل از نوبت.
 
-1. قفل روی ردیف دندان‌پزشک با `UPDLOCK + HOLDLOCK`
-2. قفل روی ردیف‌های منابع با ترتیب ثابت (ORDER BY Id) برای جلوگیری از deadlock
-3. بررسی overlap روی Appointments و ResourceAllocations
-4. INSERT Appointment + ResourceAllocations + Events
-5. COMMIT یا Rollback کامل
+### لیست انتظار
+وقتی نوبتی لغو می‌شود، `WaitlistProcessor` به‌طور خودکار اولین نفر در لیست (FIFO) پیشنهاد می‌دهد با مهلت ۳۰ دقیقه‌ای.
 
-**تأیید شده با تست رقابتی:** ۱۰۰ درخواست هم‌زمان → دقیقاً ۱۰ موفق، ۹۰ ناموفق با `SlotUnavailableException`.
+### RBAC Backend-enforced
+۲۷ permission، ۴ role (Patient, Dentist, Receptionist, Admin). `[HasPermission]` attribute در همه endpoint‌ها.
 
-### Background Workers
+### Audit History
+`AuditLog` INSERT-only. تمام تغییرات حساس (لغو، تغییر قیمت، تخصیص نقش) با OldValue/NewValue JSON ثبت می‌شوند.
 
-| Worker | فاصله | مسئولیت |
-|--------|-------|---------|
-| `AppointmentExpiryWorker` | 1 دقیقه | پردازش رزروهای منقضی‌شده با تأیید پرداخت (ADR-004) |
-| `BookingWindowPublicationWorker` | 30 ثانیه | انتشار PublishedSessions برای BookingWindows باز شده |
-| `IdempotencyCleanupWorker` | روزانه | پاکسازی IdempotencyRecords قدیمی (۹۰ روز) |
-
-### Idempotency (ADR-006)
-
-- `IdempotencyRecords` با `UNIQUE(Scope, Key)`
-- Pipeline Behavior برای خودکار کردن idempotency روی commandهای حساس
-- Webhook deduplication با `UNIQUE(Provider, ProviderEventId)`
-
-### Snapshot Commercial Terms (ADR-007)
-
-هنگام رزرو، تمام شرایط تجاری snapshot می‌شوند:
-- `ServiceNameSnapshot`, `PriceAmountSnapshot`, `CurrencySnapshot`
-- `CancellationPolicyVersionSnapshot`, `RefundablePercentSnapshot`
-- تغییرات بعدی در Services یا Policies روی رزروهای قدیمی اثر نمی‌گذارد
+### داشبورد مدیریتی
+آمار کامل: تعداد نوبت‌ها، نرخ عدم مراجعه، درآمد،利用率 دندان‌پزشک‌ها، خدمات پرتقاضا.
 
 ---
 
-## API Endpoints
+## 📡 API Reference
 
 ### Health
-- `GET /health` — no auth, no DB
+| Method | Path | Auth | Permission |
+|--------|------|------|------------|
+| GET | `/health` | — | — |
 
-### Identity (`/api/identity`)
-- `POST /otp/request` — درخواست OTP (rate-limited)
-- `POST /otp/verify` — تأیید OTP، دریافت JWT
+### Identity
+| Method | Path | Auth | Permission |
+|--------|------|------|------------|
+| POST | `/api/identity/otp/request` | — | — (rate-limited ۶۰s) |
+| POST | `/api/identity/otp/verify` | — | — |
 
-### Appointments (`/api/appointments`) [Authorize]
-- `POST /` — رزرو نوبت (idempotent با X-Idempotency-Key)
-- `POST /{id}/cancel` — لغو نوبت
+### Appointments
+| Method | Path | Auth | Permission |
+|--------|------|------|------------|
+| POST | `/api/appointments` | ✅ | `appointment.create` |
+| POST | `/api/appointments/{id}/cancel` | ✅ | `appointment.cancel` |
 
-### Payments (`/api/payments`)
-- `POST /initiate` [Authorize] — شروع پرداخت
-- `POST /webhooks` [AllowAnonymous] — دریافت callback از درگاه
-- `POST /refunds` [Authorize(Roles=Admin,Receptionist)] — درخواست بازپرداخت
+### Payments
+| Method | Path | Auth | Permission |
+|--------|------|------|------------|
+| POST | `/api/payments/initiate` | ✅ | `payment.initiate` |
+| POST | `/api/payments/webhooks` | — | — (signature verified) |
+| POST | `/api/payments/refunds` | ✅ | `refund.request` |
 
-### Scheduling (`/api/scheduling`) [Authorize(Roles=Admin)]
-- `POST /booking-windows/{id}/publish` — انتشار دستی نوبت‌ها
+### Scheduling
+| Method | Path | Auth | Permission |
+|--------|------|------|------------|
+| POST | `/api/scheduling/booking-windows/{id}/publish` | ✅ | `booking_window.publish` |
+
+### Services
+| Method | Path | Auth | Permission |
+|--------|------|------|------------|
+| GET | `/api/services` | ✅ | — |
+| GET | `/api/services/{id}` | ✅ | — |
+| POST | `/api/services` | ✅ | `service.manage` |
+| PUT | `/api/services/{id}` | ✅ | `service.manage` |
+| PUT | `/api/services/{id}/pricing` | ✅ | `pricing.manage` |
+| POST | `/api/services/{id}/deactivate` | ✅ | `service.manage` |
+| POST | `/api/services/link-dentist` | ✅ | `service.manage` |
+| POST | `/api/services/unlink-dentist` | ✅ | `service.manage` |
+
+### Resources
+| Method | Path | Auth | Permission |
+|--------|------|------|------------|
+| GET | `/api/resources` | ✅ | — |
+| GET | `/api/resources/{id}` | ✅ | — |
+| POST | `/api/resources` | ✅ | `resource.manage` |
+| PUT | `/api/resources/{id}` | ✅ | `resource.manage` |
+| POST | `/api/resources/{id}/deactivate` | ✅ | `resource.manage` |
+
+### Users
+| Method | Path | Auth | Permission |
+|--------|------|------|------------|
+| GET | `/api/users` | ✅ | ownership / `user.manage` |
+| GET | `/api/users/{id}` | ✅ | ownership / `user.manage` |
+| POST | `/api/users/{id}/deactivate` | ✅ | `user.manage` |
+| POST | `/api/users/{id}/activate` | ✅ | `user.manage` |
+| POST | `/api/users/{id}/roles` | ✅ | `role.assign` |
+| DELETE | `/api/users/{id}/roles/{roleName}` | ✅ | `role.assign` |
+| PUT | `/api/users/{id}/patient-profile` | ✅ | ownership / `user.manage` |
+| PUT | `/api/users/{id}/dentist-profile` | ✅ | `user.manage` |
+
+### Waitlist
+| Method | Path | Auth | Permission |
+|--------|------|------|------------|
+| POST | `/api/waitlist` | ✅ | `waitlist.join` |
+| POST | `/api/waitlist/{id}/cancel` | ✅ | `waitlist.join` |
+| GET | `/api/waitlist` | ✅ | ownership / `waitlist.view_all` |
+| GET | `/api/waitlist/{id}` | ✅ | ownership / `waitlist.view_all` |
+
+### Dashboard
+| Method | Path | Auth | Permission |
+|--------|------|------|------------|
+| GET | `/api/dashboard/stats` | ✅ | `dashboard.view` |
+
+### Audit Log
+| Method | Path | Auth | Permission |
+|--------|------|------|------------|
+| GET | `/api/audit/logs` | ✅ | `audit_log.view` |
+| GET | `/api/audit/entities/{type}/{id}` | ✅ | `audit_log.view` |
 
 ---
 
-## راه‌اندازی
+## 🔐 RBAC — نقش‌ها و مجوزها
+
+| نقش | مجوزهای کلیدی |
+|-----|---------------|
+| **Patient** | `appointment.create`, `appointment.cancel`, `payment.initiate`, `waitlist.join`, `otp.request` |
+| **Dentist** | `appointment.view_all`, `appointment.complete`, `appointment.mark_noshow`, `dashboard.view` |
+| **Receptionist** | تمام مجوزهای Patient + `appointment.cancel_any`, `refund.request`, `schedule.manage`, `booking_window.publish`, `waitlist.view_all`, `waitlist.manage`, `dashboard.view` |
+| **Admin** | تمام ۲۷ مجوز (شامل `user.manage`, `role.assign`, `service.manage`, `pricing.manage`, `audit_log.view`) |
+
+---
+
+## ⚙️ Background Workers
+
+| Worker | فاصله | مسئولیت | ADR |
+|--------|-------|---------|-----|
+| `AppointmentExpiryWorker` | ۱ دقیقه | پردازش رزروهای منقضی + تأیید پرداخت با درگاه | ADR-004 |
+| `BookingWindowPublicationWorker` | ۳۰ ثانیه | انتشار PublishedSessions | ADR-006 |
+| `IdempotencyCleanupWorker` | روزانه | پاکسازی رکوردهای قدیمی (۹۰ روز) | ADR-006 |
+| `ReminderSchedulingWorker` | ۵ دقیقه | ساخت یادآور ۲۴ ساعت قبل | — |
+| `NotificationDispatcherWorker` | ۳۰ ثانیه | ارسال SMS (با retry ۳ بار) | — |
+| `WaitlistOfferExpiryWorker` | ۱ دقیقه | منقضی‌کردن پیشنهادهای لیست انتظار | — |
+
+---
+
+## 🚀 راه‌اندازی
 
 ### پیش‌نیازها
-
 - .NET 10 SDK
-- SQL Server 2019+ (یا SQL Server در Docker برای تولید)
+- SQL Server 2019+ (یا Docker)
 
 ### اجرا
-
 ```bash
 dotnet restore
 dotnet build
 cd src/Dentara.Api
 dotnet run
 ```
-
-API روی `https://localhost:5001` و `http://localhost:5000` در دسترس خواهد بود.
-Swagger UI در `/swagger` در دسترس است (Development).
+API روی `https://localhost:5001` در دسترس است. Swagger UI در `/swagger`.
 
 ### اجرای تست‌ها
-
 ```bash
 dotnet test
 ```
+Integration tests از SQLite in-memory استفاده می‌کنند (بدون Docker).
 
-Integration tests از SQLite in-memory استفاده می‌کنند (بدون نیاز به Docker).
+---
+
+## 📊 مدل داده (ERD خلاصه)
+
+```
+Users ──┬── PatientProfiles
+        ├── DentistProfiles
+        └── UserRoles ── Roles
+
+Services ──┬── DentistServices ── DentistProfiles
+           └── ResourceServiceRequirements
+
+ClinicResources ── ResourceAllocations ── Appointments
+                                           ├── AppointmentEvents
+                                           └── PaymentAttempts ── Refunds
+
+WorkSchedules ── ScheduleExceptions
+BookingWindows ── PublishedSessions
+
+Notifications        WaitlistEntries        AuditLogs
+IdempotencyRecords   PaymentWebhookEvents
+```
 
 ---
 
 ## 📋 موارد شناخته‌شده (Technical Debt)
 
-1. **CancellationService و AppointmentExpiryWorker integration tests** — ۸ تست به‌خاطر conflict بین EF Core 10 + SQLite + IsRowVersion skip شده‌اند. این تست‌ها وقتی CI به SQL Server Testcontainers migrate شود، re-enable خواهند شد. منطق CQRS و state machine در unit tests پوشش داده شده است.
-
-2. **Clinic timezone** — در حال حاضر UTC+3:30 (Asia/Tehran) hardcoded است. باید از `ClinicSettings` خوانده شود.
-
-3. **Zarinpal gateway adapter** — فقط Sandbox پیاده‌سازی شده. Zarinpal adapter واقعی نیاز به API keys دارد.
-
-4. **Refresh token revocation** — `JwtTokenService.RefreshAsync` و `RevokeAsync` stub هستند. production نیاز به RefreshTokens table دارد.
+1. **Clinic timezone** — UTC+3:30 (Asia/Tehran) hardcoded. باید از `ClinicSettings` خوانده شود.
+2. **Zarinpal gateway** — فقط Sandbox پیاده‌سازی شده. Zarinpal adapter واقعی نیاز به API keys.
+3. **Refresh token revocation** — `JwtTokenService.RefreshAsync/RevokeAsync` stub هستند.
+4. **SQL Server Testcontainers** — integration tests از SQLite استفاده می‌کنند. SQL Server Testcontainers در CI پیشنهاد می‌شود برای تست کامل `rowversion` و `UPDLOCK`.
 
 ---
 
 ## لایسنس
 
-Proprietary — کلیهٔ حقوق محفوظ است.
+Proprietary — کلیه حقوق محفوظ است.
