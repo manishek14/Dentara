@@ -1,0 +1,74 @@
+# ─────────────────────────────────────────────────────────────────────────
+# Dentara — Docker Compose for local development
+#
+# Usage:
+#   docker compose up -d                    # start SQL Server + API
+#   docker compose logs -f api              # follow API logs
+#   docker compose down                     # stop and remove containers
+#   docker compose down -v                  # also remove the DB volume
+#
+# The API is available at:
+#   http://localhost:8080   (HTTP)
+#   https://localhost:8443  (HTTPS — self-signed)
+#
+# SQL Server is available at:
+#   localhost,1433  (User: sa, Password: YourStrong!Passw0rd)
+#
+# First run: the API will auto-run EF Core migrations on startup.
+# ─────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ─── SQL Server ────────────────────────────────────────────────────────
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: dentara-db
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "YourStrong!Passw0rd"
+      MSSQL_PID: "Developer"
+    ports:
+      - "1433:1433"
+    volumes:
+      - dentara-db-data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - dentara-net
+
+  # ─── Dentara API ───────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dentara-api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Development"
+      ASPNETCORE_URLS: "http://+:8080"
+      ConnectionStrings__DentaraDb: "Server=db,1433;Database=Dentara;User Id=sa;Password=YourStrong!Passw0rd;TrustServerCertificate=True;MultipleActiveResultSets=true"
+      Jwt__AccessTokenSecret: "DockerDev_Secret_Key_At_Least_32_Characters_Long_2026"
+      Jwt__Issuer: "Dentara"
+      Jwt__Audience: "Dentara"
+      SmsIr__ApiKey: "REPLACE_WITH_REAL_SMS_IR_API_KEY"
+      SmsIr__LineNumber: "REPLACE_WITH_LINE_NUMBER"
+    ports:
+      - "8080:8080"
+    networks:
+      - dentara-net
+    restart: unless-stopped
+
+volumes:
+  dentara-db-data:
+    name: dentara-db-data
+
+networks:
+  dentara-net:
+    name: dentara-net
+    driver: bridge

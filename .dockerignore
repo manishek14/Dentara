@@ -1,0 +1,14 @@
+# Docker ignore — speeds up builds by excluding unnecessary files
+**/bin/
+**/obj/
+**/.vs/
+**/.vscode/
+**/.idea/
+**/TestResults/
+**/*.user
+**/*.suo
+tests/
+*.md
+.git/
+.gitignore
+.editorconfig

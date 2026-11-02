@@ -235,6 +235,34 @@ dotnet test
 ```
 Integration tests از SQLite in-memory استفاده می‌کنند (بدون Docker).
 
+### اجرا با Docker Compose (توصیه‌شده برای توسعه محلی)
+
+```bash
+# ساخت و اجرای SQL Server + API
+docker compose up -d
+
+# مشاهده لاگ‌های API
+docker compose logs -f api
+
+# توقف و حذف container‌ها
+docker compose down
+
+# توقف + حذف volume دیتابیس (ریست کامل)
+docker compose down -v
+```
+
+| سرویس | آدرس | توضیح |
+|-------|------|-------|
+| API (HTTP) | `http://localhost:8080` | Swagger UI در `/swagger` |
+| SQL Server | `localhost:1433` | User: `sa`, Password: `YourStrong!Passw0rd` |
+
+پس از `docker compose up`، API به‌طور خودکار به SQL Server متصل می‌شود. Migration باید به‌صورت دستی اجرا شود:
+```bash
+docker compose exec api dotnet Dentara.Api.dll --migrate
+# یا از خارج container:
+dotnet ef database update --project src/Dentara.Infrastructure --startup-project src/Dentara.Api
+```
+
 ---
 
 ## 📊 مدل داده (ERD خلاصه)
